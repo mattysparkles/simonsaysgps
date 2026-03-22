@@ -32,6 +32,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - `app/src/main/java/com/simonsaysgps/domain`: models, routing/game engine, provider-selection abstractions, and utilities.
 - `app/src/main/java/com/simonsaysgps/ui`: Compose screens, components, navigation, and view models.
 - `app/src/test/java/com/simonsaysgps`: unit tests for Simon Says behavior and routing abstractions.
+- `app/src/androidTest/java/com/simonsaysgps`: deterministic Compose instrumentation coverage for key UI flows and optional screenshot export.
 
 ## Setup
 
@@ -92,6 +93,35 @@ Every maneuver is marked `REQUIRED_SIMON_SAYS`. If the user turns and Simon auth
 
 Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. If the route geometry suggests a turn and the driver follows a non-authorized maneuver, the app calls that out as a Simon violation and reroutes.
 
+## UI instrumentation and screenshot-oriented tests
+
+- `KeyFlowsScreenshotTest` covers destination search, route preview, active navigation, settings, and debug-overlay visibility with deterministic `AppUiState` fixtures.
+- The instrumentation suite injects a fake map panel instead of loading live tiles, so the tests stay demo-mode-friendly and avoid network-driven flakes.
+- Compose screenshots are captured in-memory for each scenario; optional PNG export is available only at test runtime and writes outside the repo checkout.
+- Android test animations are disabled in Gradle to keep CI runs as stable as practical.
+
+### Run locally
+
+Compile the debug app plus instrumentation suite:
+
+```bash
+gradle :app:compileDebugAndroidTestKotlin :app:assembleDebug :app:assembleDebugAndroidTest
+```
+
+Run the UI/instrumentation suite on a connected emulator or device:
+
+```bash
+gradle :app:connectedDebugAndroidTest
+```
+
+Optionally export screenshot PNGs while the tests run:
+
+```bash
+gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.recordScreenshots=true
+```
+
+When screenshot export is enabled, files are written to `/sdcard/Android/data/com.simonsaysgps/files/ui-test-snapshots/` on the device/emulator so they can be reviewed locally without committing generated artifacts. See `docs/ui_instrumentation_testing.md` for the full workflow.
+
 ## Testing the navigation logic
 
 - Enable **Demo mode** to use a fake location stream in the emulator.
@@ -146,7 +176,6 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
 - Add lane guidance, arrival state, and richer maneuver banners.
 - Expand the partial Valhalla scaffold into a concrete adapter.
-- Add screenshot-based UI tests and instrumentation tests.
 - Replace demo style URL with a self-hosted production tile/style stack.
 
 ## TODOs
