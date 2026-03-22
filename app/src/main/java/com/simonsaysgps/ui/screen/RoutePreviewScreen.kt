@@ -2,7 +2,6 @@ package com.simonsaysgps.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,10 +15,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.util.DistanceFormatter
 import com.simonsaysgps.ui.components.InfoCard
 import com.simonsaysgps.ui.components.MapLibreMapView
+import com.simonsaysgps.ui.test.UiTestTags
+import com.simonsaysgps.ui.viewmodel.AppUiState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 import java.time.Instant
 import java.time.ZoneId
@@ -32,23 +34,45 @@ fun RoutePreviewScreen(
     onBack: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
+    RoutePreviewScreenContent(
+        state = state,
+        onStartNavigation = {
+            viewModel.startNavigation()
+            onStartNavigation()
+        },
+        onBack = onBack
+    )
+}
+
+@Composable
+fun RoutePreviewScreenContent(
+    state: AppUiState,
+    onStartNavigation: () -> Unit,
+    onBack: () -> Unit,
+    mapContent: @Composable (Modifier) -> Unit = { modifier ->
+        MapLibreMapView(
+            modifier = modifier,
+            currentLocation = state.currentLocation?.coordinate,
+            selectedLocation = state.selectedPlace?.coordinate,
+            routeGeometry = state.routePreview?.geometry.orEmpty()
+        )
+    }
+) {
     val route = state.routePreview
-    Scaffold { padding ->
+    Scaffold(modifier = Modifier.testTag(UiTestTags.ROUTE_PREVIEW_SCREEN)) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             TextButton(onClick = onBack) { Text("Back") }
             if (route == null) {
-                Text(state.routeError ?: "No route loaded yet.", color = if (state.routeError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
+                Text(
+                    state.routeError ?: "No route loaded yet.",
+                    color = if (state.routeError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground
+                )
                 return@Column
             }
-            MapLibreMapView(
-                modifier = Modifier.fillMaxWidth().height(300.dp),
-                currentLocation = state.currentLocation?.coordinate,
-                selectedLocation = state.selectedPlace?.coordinate,
-                routeGeometry = route.geometry
-            )
+            mapContent(Modifier.fillMaxWidth().height(300.dp))
             InfoCard("Distance", DistanceFormatter.format(route.totalDistanceMeters, state.settings.distanceUnit))
             InfoCard("ETA", DateTimeFormatter.ofPattern("h:mm a").format(Instant.ofEpochSecond(route.etaEpochSeconds).atZone(ZoneId.systemDefault())))
             InfoCard("Maneuvers", "${route.maneuvers.size} turns")
@@ -62,7 +86,7 @@ fun RoutePreviewScreen(
                 text = route.maneuvers.take(3).joinToString("\n") { "• ${it.instruction}" },
                 style = MaterialTheme.typography.bodyLarge
             )
-            Button(onClick = { viewModel.startNavigation(); onStartNavigation() }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onStartNavigation, modifier = Modifier.fillMaxWidth()) {
                 Text("Start navigation")
             }
         }
