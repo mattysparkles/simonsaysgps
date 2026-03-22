@@ -4,8 +4,8 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 
 ## What the app does
 
-- Search for destinations with debounced Nominatim queries and recent destination shortcuts.
-- Preview an OSM route on an OpenStreetMap/MapLibre map.
+- Search for destinations with debounced Nominatim queries, short-lived cached results, and recent destination shortcuts.
+- Preview an OSM route on an OpenStreetMap/MapLibre map, with lightweight cached route previews for brief reconnect scenarios.
 - Start navigation with spoken prompts powered by Android TextToSpeech.
 - Pick from multiple prompt personalities for spoken and on-screen navigation callouts.
 - Automatically start and stop the foreground navigation service with the active turn-by-turn session.
@@ -21,7 +21,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Map rendering:** MapLibre Android SDK with an OSM-friendly public style URL placeholder.
 - **Routing:** OSRM HTTP API through a swappable `RoutingRepository` abstraction.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
-- **Persistence:** DataStore for settings.
+- **Persistence:** DataStore for settings plus lightweight search/route caches.
 - **Prompt personalities:** Data-driven prompt profiles, making it easy to add new Simon tones later.
 - **Location:** Fused Location Provider, plus a demo simulator for emulator testing.
 
@@ -38,7 +38,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 
 - Android Studio with Android SDK 36 installed.
 - JDK 17+.
-- Internet access for Nominatim, OSRM, and map tiles.
+- Internet access for Nominatim, OSRM, and map tiles. Recent search results and the latest matching route preview can be reused briefly when connectivity drops, but fresh searches and new routes still require network access.
 
 ### Run locally
 
@@ -76,12 +76,21 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 
 - Enable **Demo mode** to use a fake location stream in the emulator.
 - Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
-- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason.
+- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
 - Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, routing repository mapping behavior, search debouncing, and recent destination persistence/mapping behavior.
+
+## Search/routing cache behavior
+
+- Destination search results are cached per normalized query for a short window so repeated searches can reuse recent results without immediately hitting Nominatim again.
+- Route previews are cached for the latest matching origin/destination pairs using a coarse coordinate key, which helps when a request is retried shortly after a timeout or temporary disconnect.
+- Network requests now use explicit connect/read/call timeouts and a small retry policy for transient GET failures and 5xx responses.
+- User-facing messages distinguish between no network, timeout/server failure, empty search results, and cache-backed fallbacks.
+- This is not full offline navigation: map tiles, fresh routing, and uncached searches still require network access.
 
 ## Known limitations
 
 - Public OSRM and Nominatim endpoints are convenient defaults but are not sufficient for real production scale.
+- Offline support in this phase is intentionally lightweight: repeated destination queries and the latest matching route preview are cached, but the app does not perform full offline routing.
 - Turn detection heuristics currently use route proximity, bearing deltas, and step proximity; they are intentionally understandable rather than fully map-matched.
 - The initial implementation keeps most functionality in one Android app module for repo simplicity.
 - Map overlay styling is intentionally lightweight for phase 1.
@@ -114,4 +123,4 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - Start/stop the foreground service automatically when navigation begins/ends.
 - Add user-selectable prompt personalities.
 - Tighten missed-turn detection to avoid jitter-driven reroutes.
-- Add offline caches and resilient networking.
+- Expand lightweight cache coverage and retry/backoff policies as the app grows.

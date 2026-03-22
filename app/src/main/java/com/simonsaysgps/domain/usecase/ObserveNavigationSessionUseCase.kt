@@ -5,6 +5,7 @@ import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.NavigationSessionState
 import com.simonsaysgps.domain.model.PromptPersonality
+import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.RerouteReason
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.repository.RoutingRepository
@@ -14,9 +15,14 @@ class ObserveNavigationSessionUseCase @Inject constructor(
     private val routingRepository: RoutingRepository,
     private val simonSaysEngine: SimonSaysEngine
 ) {
-    suspend fun reroute(origin: Coordinate, destination: Coordinate, activeRoute: Route?, reason: RerouteReason): Result<Route> {
-        return routingRepository.calculateRoute(origin, destination).map { newRoute ->
-            if (activeRoute == null) newRoute else newRoute.copy(totalDurationSeconds = newRoute.totalDurationSeconds)
+    suspend fun reroute(origin: Coordinate, destination: Coordinate, activeRoute: Route?, reason: RerouteReason): RepositoryResult<Route> {
+        return when (val result = routingRepository.calculateRoute(origin, destination)) {
+            is RepositoryResult.Success -> RepositoryResult.Success(
+                value = if (activeRoute == null) result.value else result.value.copy(totalDurationSeconds = result.value.totalDurationSeconds),
+                source = result.source,
+                fallbackFailure = result.fallbackFailure
+            )
+            is RepositoryResult.Failure -> result
         }
     }
 

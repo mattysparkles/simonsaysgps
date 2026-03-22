@@ -82,9 +82,9 @@ fun MapSearchScreen(
                         SearchStatus.DEBOUNCING -> Text("Waiting briefly before searching…")
                         SearchStatus.LOADING -> Text("Searching OpenStreetMap destinations…")
                         SearchStatus.ERROR -> Text(state.searchError ?: "Something went wrong while searching.")
-                        SearchStatus.EMPTY -> Text("No destinations matched that search.")
+                        SearchStatus.EMPTY -> Text(state.searchInfo ?: "No destinations matched that search.")
                         SearchStatus.RECENTS -> Text("Recent destinations appear here when the search is empty.")
-                        SearchStatus.SUCCESS -> Text("Select a destination to preview a route.")
+                        SearchStatus.SUCCESS -> Text(state.searchInfo ?: "Select a destination to preview a route.")
                     }
                 },
                 trailingIcon = { IconButton(onClick = viewModel::search) { Icon(Icons.Default.Search, contentDescription = null) } }
@@ -112,6 +112,7 @@ fun MapSearchScreen(
                 searchResults = state.searchResults,
                 recentDestinations = state.recentDestinations,
                 searchError = state.searchError,
+                searchInfo = state.searchInfo,
                 onPlaceSelected = viewModel::selectPlace,
                 onRemoveRecentDestination = viewModel::removeRecentDestination,
                 onClearRecentDestinations = viewModel::clearRecentDestinations
@@ -127,6 +128,7 @@ private fun SearchResultsSection(
     searchResults: List<PlaceResult>,
     recentDestinations: List<PlaceResult>,
     searchError: String?,
+    searchInfo: String?,
     onPlaceSelected: (PlaceResult) -> Unit,
     onRemoveRecentDestination: (String) -> Unit,
     onClearRecentDestinations: () -> Unit
@@ -162,7 +164,7 @@ private fun SearchResultsSection(
         SearchStatus.EMPTY -> MessageCard(
             modifier = modifier,
             title = "No matches",
-            body = "Try a broader place name, city, or street address."
+            body = searchInfo ?: "Try a broader place name, city, or street address."
         )
 
         SearchStatus.SUCCESS -> {
