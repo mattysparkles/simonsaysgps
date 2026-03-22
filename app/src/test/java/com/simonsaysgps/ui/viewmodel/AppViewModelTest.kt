@@ -5,6 +5,7 @@ import com.simonsaysgps.data.location.DemoLocationRepository
 import com.simonsaysgps.data.location.FusedLocationRepository
 import com.simonsaysgps.domain.engine.SimonSaysEngine
 import com.simonsaysgps.domain.engine.TurnDetector
+import com.simonsaysgps.domain.model.ArrivalStatus
 import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.ManeuverAuthorization
@@ -117,6 +118,7 @@ class AppViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.uiState.value.navigationState.navigationActive).isFalse()
+        assertThat(viewModel.uiState.value.navigationState.arrivalStatus).isEqualTo(ArrivalStatus.ARRIVED)
         assertThat(serviceController.startReasons).containsExactly("turn-by-turn navigation began")
         assertThat(serviceController.stopReasons).containsExactly("destination reached")
         verify(exactly = 1) { voicePromptManager.stop() }

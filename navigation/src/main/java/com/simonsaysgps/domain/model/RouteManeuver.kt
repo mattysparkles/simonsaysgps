@@ -11,6 +11,7 @@ data class RouteManeuver(
     val authorization: ManeuverAuthorization,
     val headingBefore: Double?,
     val headingAfter: Double?,
+    val laneGuidance: LaneGuidance? = null,
     val expectedBearingDelta: Double? = headingBefore?.let { before -> headingAfter?.let { after -> normalizeDelta(after - before) } }
 ) {
     companion object {

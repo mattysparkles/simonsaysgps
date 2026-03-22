@@ -41,6 +41,8 @@ class PromptFactory @Inject constructor() {
 
     fun approvalPrompt(personality: PromptPersonality): String = profile(personality).approval()
 
+    fun arrivalPrompt(personality: PromptPersonality): String = profile(personality).arrival()
+
     fun reroutePrompt(reason: RerouteReason, personality: PromptPersonality): String {
         return when (reason) {
             RerouteReason.UNAUTHORIZED_TURN -> profile(personality).unauthorizedTurn()
@@ -63,6 +65,7 @@ class PromptFactory @Inject constructor() {
                 authorizedImmediate = { instruction -> "Simon says $instruction." },
                 informationalImmediate = { instruction -> "$instruction." },
                 approval = { "Nice job. Simon approves." },
+                arrival = { "You have arrived. Simon approves." },
                 unauthorizedTurn = { "Oh, Simon didn't say. Rerouting." },
                 missedTurn = { "Simon noticed that miss. Rerouting." },
                 offRoute = { "Off route. Simon is recalculating." },
@@ -74,6 +77,7 @@ class PromptFactory @Inject constructor() {
                 authorizedImmediate = { instruction -> "Simon says $instruction. Try not to improvise." },
                 informationalImmediate = { instruction -> "$instruction. Or don't, but that's on you." },
                 approval = { "Nice. Simon is almost impressed." },
+                arrival = { "You made it. Simon will allow it." },
                 unauthorizedTurn = { "Simon definitely didn't say to do that. Rerouting." },
                 missedTurn = { "Simon called that turn. You missed it. Rerouting." },
                 offRoute = { "Bold choice. You're off route, so Simon is recalculating." },
@@ -85,6 +89,7 @@ class PromptFactory @Inject constructor() {
                 authorizedImmediate = { instruction -> "Simon says please $instruction." },
                 informationalImmediate = { instruction -> "Please $instruction." },
                 approval = { "Nicely done. Simon appreciates that." },
+                arrival = { "You have arrived. Simon appreciates the careful driving." },
                 unauthorizedTurn = { "Simon didn't say to turn there. Rerouting now, please." },
                 missedTurn = { "It looks like that Simon says turn was missed. Rerouting now." },
                 offRoute = { "We seem to be off route. Simon will recalculate, please hold on." },
@@ -100,6 +105,7 @@ private data class PromptPersonalityProfile(
     val authorizedImmediate: (instruction: String) -> String,
     val informationalImmediate: (instruction: String) -> String,
     val approval: () -> String,
+    val arrival: () -> String,
     val unauthorizedTurn: () -> String,
     val missedTurn: () -> String,
     val offRoute: () -> String,

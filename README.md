@@ -7,6 +7,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Search for destinations with debounced Nominatim queries, short-lived cached results, and recent destination shortcuts.
 - Preview an OSM route on an OpenStreetMap/MapLibre map, with lightweight cached route previews for brief reconnect scenarios.
 - Start navigation with spoken prompts powered by Android TextToSpeech.
+- Follow richer active-navigation banners with clearer Simon Says authorization messaging, arrival handling, and lane-guidance-ready placeholders.
 - Pick from multiple prompt personalities for spoken and on-screen navigation callouts.
 - Automatically start and stop the foreground navigation service with the active turn-by-turn session.
 - Detect upcoming maneuvers and decide whether a turn was authorized, missed, or unauthorized.
@@ -136,8 +137,15 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Enable **Demo mode** to use a fake location stream in the emulator.
 - Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
 - Switch **Routing provider** in Settings to validate provider resolution and fallback behavior.
-- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
-- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, recent destination persistence/mapping behavior, and navigation-session restoration/storage behavior.
+- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, arrival state, heading, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
+- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, arrival-state transitions, navigation banner mapping, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, recent destination persistence/mapping behavior, and navigation-session restoration/storage behavior.
+
+## Enhanced active navigation UX
+
+- Active guidance now promotes a richer maneuver banner with step progress, turn-type context, road labeling, and a clearer explanation of whether the current instruction is a real **Simon Says** move or informational-only.
+- When the final step resolves, the navigation state explicitly transitions through `APPROACHING_DESTINATION` to `ARRIVED`, allowing the UI to show a dedicated arrival banner instead of falling back to a generic empty-next-step message.
+- Lane-guidance-ready abstractions now exist in the domain and UI layers. The current OSRM/GraphHopper providers do not yet populate lane-level data, so the UI shows a Compose-native placeholder that explains lane guidance will appear when provider support lands.
+- No binary files were added for this UX update.
 
 ## Navigation lifecycle resilience
 
@@ -183,7 +191,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 
 - Keep trimming Android-specific concerns out of `:navigation` as the app grows, while avoiding unnecessary module sprawl.
 - Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
-- Add lane guidance, arrival state, and richer maneuver banners.
+- Expand lane guidance from the current provider-ready UI/domain scaffold into provider-backed lane-level instructions.
 - Expand the partial Valhalla scaffold into a concrete adapter.
 - Replace demo style URL with a self-hosted production tile/style stack.
 

@@ -13,5 +13,6 @@ data class NavigationSessionState(
     val offRoute: Boolean = false,
     val lastRerouteReason: RerouteReason = RerouteReason.NONE,
     val headingDegrees: Double? = null,
+    val arrivalStatus: ArrivalStatus = ArrivalStatus.EN_ROUTE,
     val navigationActive: Boolean = false
 )
