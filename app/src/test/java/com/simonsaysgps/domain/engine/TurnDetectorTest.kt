@@ -1,0 +1,45 @@
+package com.simonsaysgps.domain.engine
+
+import com.google.common.truth.Truth.assertThat
+import com.simonsaysgps.domain.model.Coordinate
+import com.simonsaysgps.domain.model.LocationSample
+import com.simonsaysgps.domain.model.ManeuverAuthorization
+import com.simonsaysgps.domain.model.RouteManeuver
+import com.simonsaysgps.domain.model.TurnType
+import org.junit.Test
+
+class TurnDetectorTest {
+    private val detector = TurnDetector()
+    private val maneuver = RouteManeuver(
+        id = "m1",
+        coordinate = Coordinate(0.0, 0.0001),
+        instruction = "Turn right",
+        turnType = TurnType.RIGHT,
+        roadName = null,
+        distanceFromPreviousMeters = 20.0,
+        distanceToNextMeters = 20.0,
+        authorization = ManeuverAuthorization.REQUIRED_SIMON_SAYS,
+        headingBefore = 0.0,
+        headingAfter = 90.0
+    )
+
+    @Test
+    fun `detector recognizes maneuver turn near step`() {
+        val detection = detector.detect(
+            previous = sample(0.0, 0.0, 0f),
+            current = sample(0.0, 0.0001, 90f),
+            maneuver = maneuver,
+            routeGeometry = listOf(Coordinate(0.0, 0.0), Coordinate(0.0, 0.0001))
+        )
+        assertThat(detection.occurred).isTrue()
+        assertThat(detection.onRouteCorridor).isTrue()
+    }
+
+    private fun sample(lat: Double, lon: Double, bearing: Float) = LocationSample(
+        coordinate = Coordinate(lat, lon),
+        accuracyMeters = 5f,
+        bearing = bearing,
+        speedMetersPerSecond = 5f,
+        timestampMillis = 0L
+    )
+}

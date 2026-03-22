@@ -1,0 +1,8 @@
+package com.simonsaysgps.domain.repository
+
+import com.simonsaysgps.domain.model.Coordinate
+import com.simonsaysgps.domain.model.Route
+
+interface RoutingRepository {
+    suspend fun calculateRoute(origin: Coordinate, destination: Coordinate): Result<Route>
+}
