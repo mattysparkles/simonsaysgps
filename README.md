@@ -11,7 +11,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Automatically start and stop the foreground navigation service with the active turn-by-turn session.
 - Detect upcoming maneuvers and decide whether a turn was authorized, missed, or unauthorized.
 - Reroute with playful prompts like: _"Oh, Simon didn't say. Rerouting."_
-- Offer a debug overlay and demo mode for emulator testing.
+- Offer a debug overlay, demo mode, and a routing-provider selector for emulator testing and provider experiments.
 
 ## Stack choices
 
@@ -19,7 +19,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Architecture:** MVVM with clear domain/data/UI separation.
 - **DI:** Hilt.
 - **Map rendering:** MapLibre Android SDK with an OSM-friendly public style URL placeholder.
-- **Routing:** OSRM HTTP API through a swappable `RoutingRepository` abstraction.
+- **Routing:** Provider-selectable routing through a swappable `RoutingRepository` abstraction with provider adapters.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
 - **Persistence:** DataStore for settings plus lightweight search/route caches.
 - **Prompt personalities:** Data-driven prompt profiles, making it easy to add new Simon tones later.
@@ -27,8 +27,8 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 
 ## Project structure
 
-- `app/src/main/java/com/simonsaysgps/data`: network, repositories, and location providers.
-- `app/src/main/java/com/simonsaysgps/domain`: models, routing/game engine, prompt generation, and utilities.
+- `app/src/main/java/com/simonsaysgps/data`: network, repositories, routing provider adapters, and location providers.
+- `app/src/main/java/com/simonsaysgps/domain`: models, routing/game engine, provider-selection abstractions, and utilities.
 - `app/src/main/java/com/simonsaysgps/ui`: Compose screens, components, navigation, and view models.
 - `app/src/test/java/com/simonsaysgps`: unit tests for Simon Says behavior and routing abstractions.
 
@@ -38,7 +38,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 
 - Android Studio with Android SDK 36 installed.
 - JDK 17+.
-- Internet access for Nominatim, OSRM, and map tiles. Recent search results and the latest matching route preview can be reused briefly when connectivity drops, but fresh searches and new routes still require network access.
+- Internet access for Nominatim, routing provider APIs, and map tiles. Recent search results and the latest matching route preview can be reused briefly when connectivity drops, but fresh searches and new routes still require network access.
 
 ### Run locally
 
@@ -48,19 +48,38 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 4. Grant location permission.
 5. For emulator-first testing, leave **Demo mode** enabled in Settings.
 6. Choose **Prompt personality** in Settings to switch between Classic Simon, Snarky Simon, and Polite Simon. The selected tone is persisted in DataStore and reused by TextToSpeech prompts.
+7. Choose **Routing provider** in Settings if you want to test a non-default provider.
 
 > Note: `gradle/wrapper/gradle-wrapper.jar` is intentionally excluded from the tracked PR. See `docs/BINARY_FILES_MANIFEST.md` for its checksum and regeneration instructions.
 
-### API/base URL configuration
+### Routing provider configuration
 
-The app builds with placeholder/default public endpoints via `gradle.properties`:
+The routing layer now separates provider selection from provider implementation:
 
+- `RoutingRepository` remains the app-facing abstraction used by the view model and domain flow.
+- `ProviderRoutingRepository` adapters register concrete providers such as OSRM and GraphHopper.
+- `SelectingRoutingRepository` reads the persisted user setting and resolves the active provider, falling back to the configured default provider when the requested provider is unsupported or unconfigured.
+
+Default/provider-specific properties live in `gradle.properties` and can be overridden with environment-specific Gradle properties:
+
+- `DEFAULT_ROUTING_PROVIDER=OSRM`
 - `OSRM_BASE_URL=https://router.project-osrm.org/`
+- `GRAPH_HOPPER_BASE_URL=https://graphhopper.com/api/1/`
+- `GRAPH_HOPPER_API_KEY=`
+- `GRAPH_HOPPER_PROFILE=car`
+- `VALHALLA_BASE_URL=https://valhalla1.openstreetmap.de/`
 - `NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org/`
 - `MAP_STYLE_URL=https://demotiles.maplibre.org/style.json`
-- `GRAPH_HOPPER_API_KEY=` (reserved placeholder for future provider swap)
 
-For a more production-minded deployment, point these to your own hosted OSRM/Nominatim/tiles infrastructure or a paid routing provider.
+#### Supported providers
+
+- **OSRM:** Fully implemented and remains the default provider.
+- **GraphHopper:** Adapter implemented for route calculation and maneuver mapping. It is only considered available when `GRAPH_HOPPER_API_KEY` is configured.
+- **Valhalla:** Selection option and configuration placeholder are present, but a concrete adapter is not implemented in this PR. Selecting it falls back gracefully to the configured default provider when available.
+
+### API/base URL configuration
+
+The app builds with placeholder/default public endpoints via `gradle.properties`. For a more production-minded deployment, point these to your own hosted OSRM/Nominatim/tiles infrastructure or a paid routing provider. GraphHopper additionally requires a valid API key.
 
 ## Simon Says rules
 
@@ -76,20 +95,23 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 
 - Enable **Demo mode** to use a fake location stream in the emulator.
 - Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
+- Switch **Routing provider** in Settings to validate provider resolution and fallback behavior.
 - Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
-- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, routing repository mapping behavior, search debouncing, and recent destination persistence/mapping behavior.
+- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, and recent destination persistence/mapping behavior.
 
 ## Search/routing cache behavior
 
 - Destination search results are cached per normalized query for a short window so repeated searches can reuse recent results without immediately hitting Nominatim again.
 - Route previews are cached for the latest matching origin/destination pairs using a coarse coordinate key, which helps when a request is retried shortly after a timeout or temporary disconnect.
 - Network requests now use explicit connect/read/call timeouts and a small retry policy for transient GET failures and 5xx responses.
-- User-facing messages distinguish between no network, timeout/server failure, empty search results, and cache-backed fallbacks.
+- User-facing messages distinguish between no network, timeout/server failure, and empty search results. Provider-selection fallback happens at repository resolution time so the app stays stable even when a requested provider is not yet implemented.
 - This is not full offline navigation: map tiles, fresh routing, and uncached searches still require network access.
 
 ## Known limitations
 
 - Public OSRM and Nominatim endpoints are convenient defaults but are not sufficient for real production scale.
+- GraphHopper support depends on a configured API key and currently uses a lightweight maneuver mapping based on the Directions API instruction sign values.
+- Valhalla is scaffolded for selection/configuration but not yet implemented as a concrete routing adapter.
 - Offline support in this phase is intentionally lightweight: repeated destination queries and the latest matching route preview are cached, but the app does not perform full offline routing.
 - Turn detection heuristics currently use route proximity, bearing deltas, and step proximity; they are intentionally understandable rather than fully map-matched.
 - The initial implementation keeps most functionality in one Android app module for repo simplicity.
@@ -113,14 +135,12 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - Add a dedicated `navigation` module and split provider integrations into separate Gradle modules.
 - Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
 - Add lane guidance, arrival state, and richer maneuver banners.
-- Support provider selection between OSRM, GraphHopper, and Valhalla.
+- Expand the partial Valhalla scaffold into a concrete adapter.
 - Introduce WorkManager/service orchestration for robust long-running navigation sessions.
 - Add screenshot-based UI tests and instrumentation tests.
 - Replace demo style URL with a self-hosted production tile/style stack.
 
 ## TODOs
 
-- Start/stop the foreground service automatically when navigation begins/ends.
-- Add user-selectable prompt personalities.
 - Tighten missed-turn detection to avoid jitter-driven reroutes.
 - Expand lightweight cache coverage and retry/backoff policies as the app grows.

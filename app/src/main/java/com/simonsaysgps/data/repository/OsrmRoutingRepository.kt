@@ -7,9 +7,11 @@ import com.simonsaysgps.domain.model.ManeuverAuthorization
 import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
+import com.simonsaysgps.domain.model.RoutingProvider
 import com.simonsaysgps.domain.model.TurnType
+import com.simonsaysgps.domain.repository.ProviderRoutingRepository
 import com.simonsaysgps.domain.repository.RouteCacheStore
-import com.simonsaysgps.domain.repository.RoutingRepository
+import com.simonsaysgps.domain.repository.RoutingProviderAvailability
 import com.simonsaysgps.domain.util.GeoUtils
 import javax.inject.Inject
 
@@ -17,7 +19,11 @@ class OsrmRoutingRepository @Inject constructor(
     private val api: OsrmApi,
     private val routeCacheStore: RouteCacheStore,
     private val clock: () -> Long = { System.currentTimeMillis() }
-) : RoutingRepository {
+) : ProviderRoutingRepository {
+    override val provider: RoutingProvider = RoutingProvider.OSRM
+
+    override fun availability(): RoutingProviderAvailability = RoutingProviderAvailability(available = true)
+
     override suspend fun calculateRoute(origin: Coordinate, destination: Coordinate): RepositoryResult<Route> {
         val originKey = RouteCacheKeyFactory.fromCoordinate(origin)
         val destinationKey = RouteCacheKeyFactory.fromCoordinate(destination)

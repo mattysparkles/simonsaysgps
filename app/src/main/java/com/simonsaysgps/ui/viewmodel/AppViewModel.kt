@@ -347,7 +347,8 @@ class AppViewModel @Inject constructor(
     private fun routeErrorMessage(failure: NetworkFailure): String = when (failure.type) {
         NetworkFailureType.NO_NETWORK -> "No network connection. Route calculation still needs internet unless this trip was cached recently."
         NetworkFailureType.TIMEOUT -> "Route request timed out. Please try again."
-        NetworkFailureType.SERVER -> "Routing service error. Please try again shortly."
+        NetworkFailureType.SERVER -> failure.detail?.let { "Routing service error: $it" }
+            ?: "Routing service error. Please try again shortly."
         NetworkFailureType.UNKNOWN -> "Route request failed unexpectedly. Please try again."
     }
 
