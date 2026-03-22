@@ -27,17 +27,19 @@ import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.VoicePromptManager
-import com.simonsaysgps.data.explore.DemoEventDataProvider
-import com.simonsaysgps.data.explore.DemoPlaceDataProvider
-import com.simonsaysgps.data.explore.DemoPromotionsProvider
-import com.simonsaysgps.data.explore.DemoReviewsProvider
+import com.simonsaysgps.data.explore.CuratedEventProvider
+import com.simonsaysgps.data.explore.CuratedPromotionSignalProvider
+import com.simonsaysgps.data.explore.CuratedReviewProvider
+import com.simonsaysgps.data.explore.NominatimPlaceDetailsProvider
+import com.simonsaysgps.data.explore.NominatimPlaceDiscoveryProvider
 import com.simonsaysgps.data.explore.RecentDestinationVisitHistoryProvider
 import com.simonsaysgps.data.repository.explore.DefaultExploreRepository
-import com.simonsaysgps.domain.repository.explore.EventDataProvider
+import com.simonsaysgps.domain.repository.explore.EventProvider
 import com.simonsaysgps.domain.repository.explore.ExploreRepository
-import com.simonsaysgps.domain.repository.explore.PlaceDataProvider
-import com.simonsaysgps.domain.repository.explore.PromotionsProvider
-import com.simonsaysgps.domain.repository.explore.ReviewsProvider
+import com.simonsaysgps.domain.repository.explore.PlaceDetailsProvider
+import com.simonsaysgps.domain.repository.explore.PlaceDiscoveryProvider
+import com.simonsaysgps.domain.repository.explore.PromotionSignalProvider
+import com.simonsaysgps.domain.repository.explore.ReviewProvider
 import com.simonsaysgps.domain.repository.explore.UserVisitHistoryProvider
 import com.simonsaysgps.domain.service.explore.DefaultExploreOrchestrator
 import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
@@ -191,17 +193,25 @@ abstract class RepositoryModule {
     abstract fun bindExploreRepository(impl: DefaultExploreRepository): ExploreRepository
 
     @Binds
-    abstract fun bindPlaceDataProvider(impl: DemoPlaceDataProvider): PlaceDataProvider
+    @IntoSet
+    abstract fun bindPlaceDiscoveryProvider(impl: NominatimPlaceDiscoveryProvider): PlaceDiscoveryProvider
 
     @Binds
-    abstract fun bindEventDataProvider(impl: DemoEventDataProvider): EventDataProvider
+    @IntoSet
+    abstract fun bindPlaceDetailsProvider(impl: NominatimPlaceDetailsProvider): PlaceDetailsProvider
+
+    @Binds
+    @IntoSet
+    abstract fun bindEventProvider(impl: CuratedEventProvider): EventProvider
 
     @Binds
     abstract fun bindVisitHistoryProvider(impl: RecentDestinationVisitHistoryProvider): UserVisitHistoryProvider
 
     @Binds
-    abstract fun bindReviewsProvider(impl: DemoReviewsProvider): ReviewsProvider
+    @IntoSet
+    abstract fun bindReviewProvider(impl: CuratedReviewProvider): ReviewProvider
 
     @Binds
-    abstract fun bindPromotionsProvider(impl: DemoPromotionsProvider): PromotionsProvider
+    @IntoSet
+    abstract fun bindPromotionProvider(impl: CuratedPromotionSignalProvider): PromotionSignalProvider
 }

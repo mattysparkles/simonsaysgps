@@ -63,25 +63,73 @@ data class ExploreQuery(
     val settings: ExploreSettings = ExploreSettings()
 )
 
+data class ExploreSourceAttribution(
+    val provider: String,
+    val label: String = provider,
+    val verified: Boolean = true,
+    val termsLimitedToSummary: Boolean = false,
+    val debugDetail: String? = null
+)
+
+data class ExploreProviderLink(
+    val provider: String,
+    val externalId: String
+)
+
+data class ExploreConfidenceSignal(
+    val label: String,
+    val confidence: Float,
+    val inferred: Boolean,
+    val detail: String,
+    val source: ExploreSourceAttribution
+)
+
+data class ExploreReviewSourceSummary(
+    val provider: String,
+    val providerLabel: String,
+    val averageRating: Double?,
+    val reviewCount: Int,
+    val summary: String? = null,
+    val internal: Boolean = false,
+    val attribution: ExploreSourceAttribution = ExploreSourceAttribution(provider = provider, label = providerLabel, verified = !internal),
+    val confidence: Float = if (internal) 0.95f else 0.8f
+)
+
 data class ExploreReviewSummary(
     val averageRating: Double,
     val totalCount: Int,
     val internalAverageRating: Double? = null,
     val internalCount: Int = 0,
-    val summary: String? = null
-)
+    val summary: String? = null,
+    val sources: List<ExploreReviewSourceSummary> = emptyList()
+) {
+    val internalSources: List<ExploreReviewSourceSummary> = sources.filter { it.internal }
+    val thirdPartySources: List<ExploreReviewSourceSummary> = sources.filterNot { it.internal }
+}
+
+enum class ExploreEventTiming {
+    HAPPENING_NOW,
+    STARTING_SOON,
+    UPCOMING,
+    ALL_DAY
+}
 
 data class ExploreEventInfo(
     val title: String,
     val startEpochMillis: Long,
     val endEpochMillis: Long? = null,
-    val summary: String? = null
+    val summary: String? = null,
+    val timing: ExploreEventTiming = ExploreEventTiming.UPCOMING,
+    val attribution: ExploreSourceAttribution,
+    val confidence: Float = 0.8f
 )
 
 data class ExplorePromotionInfo(
     val summary: String,
     val confidence: Float,
-    val source: String
+    val source: String,
+    val attribution: ExploreSourceAttribution = ExploreSourceAttribution(provider = source, label = source, verified = confidence >= 0.9f),
+    val inferred: Boolean = confidence < 0.9f
 )
 
 data class ExploreCandidate(
@@ -92,9 +140,11 @@ data class ExploreCandidate(
     val coordinate: Coordinate,
     val facets: Set<ExploreFacet>,
     val openNow: Boolean? = null,
+    val phoneNumber: String? = null,
+    val websiteUrl: String? = null,
     val reviewSummary: ExploreReviewSummary? = null,
-    val eventInfo: ExploreEventInfo? = null,
-    val promotionInfo: ExplorePromotionInfo? = null,
+    val eventSignals: List<ExploreEventInfo> = emptyList(),
+    val promotionSignals: List<ExplorePromotionInfo> = emptyList(),
     val visitedBefore: Boolean = false,
     val lastVisitedEpochMillis: Long? = null,
     val sourceConfidence: Float = 0.65f,
@@ -103,8 +153,15 @@ data class ExploreCandidate(
     val quietScore: Float? = null,
     val alcoholFocused: Boolean = false,
     val adultOriented: Boolean = false,
-    val recentlyOpenedOrTrending: Boolean = false
-)
+    val recentlyOpenedOrTrending: Boolean = false,
+    val sourceAttributions: List<ExploreSourceAttribution> = emptyList(),
+    val providerLinks: List<ExploreProviderLink> = emptyList(),
+    val confidenceSignals: List<ExploreConfidenceSignal> = emptyList(),
+    val whyChosenHints: List<String> = emptyList()
+) {
+    val primaryEvent: ExploreEventInfo? = eventSignals.minByOrNull { it.startEpochMillis }
+    val primaryPromotion: ExplorePromotionInfo? = promotionSignals.maxByOrNull { it.confidence }
+}
 
 data class ExploreReason(
     val title: String,

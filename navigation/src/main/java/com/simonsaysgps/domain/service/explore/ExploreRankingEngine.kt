@@ -33,19 +33,23 @@ class ExploreRankingEngine {
                 breakdown["surprise"] = surpriseScore(candidate, query)
                 breakdown["quiet"] = quietPreferenceScore(candidate, query)
                 breakdown["accessibility"] = accessibilityScore(candidate, query)
+                breakdown["promotions"] = promotionScore(candidate)
+                breakdown["ratingConfidence"] = ratingConfidenceScore(candidate)
 
                 val weightedScore =
-                    breakdown["distance"]!! * 0.18 +
-                        breakdown["openNow"]!! * 0.14 +
+                    breakdown["distance"]!! * 0.15 +
+                        breakdown["openNow"]!! * 0.12 +
                         breakdown["reviews"]!! * 0.16 +
-                        breakdown["category"]!! * 0.22 +
-                        breakdown["eventTiming"]!! * 0.08 +
-                        breakdown["novelty"]!! * 0.08 +
+                        breakdown["category"]!! * 0.18 +
+                        breakdown["eventTiming"]!! * 0.1 +
+                        breakdown["novelty"]!! * 0.06 +
                         breakdown["routeAlignment"]!! * 0.07 +
                         breakdown["homeProximity"]!! * 0.04 +
                         breakdown["surprise"]!! * 0.02 +
-                        breakdown["quiet"]!! * 0.005 +
-                        breakdown["accessibility"]!! * 0.005
+                        breakdown["quiet"]!! * 0.03 +
+                        breakdown["accessibility"]!! * 0.03 +
+                        breakdown["promotions"]!! * 0.02 +
+                        breakdown["ratingConfidence"]!! * 0.02
 
                 ExploreResult(
                     candidate = candidate,
@@ -62,7 +66,7 @@ class ExploreRankingEngine {
 
     private fun passesHardFilters(query: ExploreQuery, candidate: ExploreCandidate): Boolean {
         val settings = query.settings
-        if (settings.requireOpenNowByDefault && query.category != ExploreCategory.NEW && candidate.eventInfo == null && candidate.openNow == false) return false
+        if (settings.requireOpenNowByDefault && query.category != ExploreCategory.NEW && candidate.primaryEvent == null && candidate.openNow == false) return false
         if (query.category == ExploreCategory.NEVER_BEEN && candidate.visitedBefore) return false
         if (settings.kidFriendlyOnly && candidate.kidFriendly == false) return false
         if (settings.avoidAlcoholFocusedVenues && candidate.alcoholFocused) return false
@@ -77,7 +81,7 @@ class ExploreRankingEngine {
     }
 
     private fun openNowScore(candidate: ExploreCandidate, query: ExploreQuery): Double = when {
-        candidate.eventInfo != null -> 0.85
+        candidate.primaryEvent != null && eventTimingScore(candidate, query) >= 0.9 -> 0.95
         candidate.openNow == true -> if (query.category == ExploreCategory.DELICIOUS || query.category == ExploreCategory.OPEN_NOW) 1.0 else 0.8
         candidate.openNow == false -> if (query.category == ExploreCategory.OPEN_NOW) 0.05 else 0.25
         else -> 0.45
@@ -87,15 +91,24 @@ class ExploreRankingEngine {
         val reviews = candidate.reviewSummary ?: return 0.45
         val external = (reviews.averageRating / 5.0).coerceIn(0.0, 1.0)
         val internal = reviews.internalAverageRating?.div(5.0)?.coerceIn(0.0, 1.0) ?: external
-        return if (query.settings.useInternalReviewsFirst) {
+        val countConfidence = (reviews.totalCount.coerceAtMost(500) / 500.0).coerceIn(0.05, 1.0)
+        val blended = if (query.settings.useInternalReviewsFirst) {
             (internal * 0.7) + (external * 0.3)
         } else {
             (external * 0.7) + (internal * 0.3)
-        }.coerceIn(0.0, 1.0)
+        }
+        return (blended * 0.8 + countConfidence * 0.2).coerceIn(0.0, 1.0)
+    }
+
+    private fun ratingConfidenceScore(candidate: ExploreCandidate): Double {
+        val reviewSummary = candidate.reviewSummary ?: return 0.2
+        val countScore = (reviewSummary.totalCount.coerceAtMost(400) / 400.0).coerceIn(0.0, 1.0)
+        val internalBoost = if (reviewSummary.internalCount > 0) 0.15 else 0.0
+        return (countScore + internalBoost).coerceIn(0.0, 1.0)
     }
 
     private fun eventTimingScore(candidate: ExploreCandidate, query: ExploreQuery): Double {
-        val event = candidate.eventInfo ?: return 0.2
+        val event = candidate.primaryEvent ?: return 0.2
         val millisUntilStart = event.startEpochMillis - query.nowEpochMillis
         return when {
             millisUntilStart <= 0L -> 1.0
@@ -106,10 +119,19 @@ class ExploreRankingEngine {
         }
     }
 
-    private fun noveltyScore(candidate: ExploreCandidate): Double = when {
-        candidate.visitedBefore -> 0.15
-        candidate.recentlyOpenedOrTrending -> 1.0
-        else -> 0.75
+    private fun promotionScore(candidate: ExploreCandidate): Double {
+        val promotion = candidate.primaryPromotion ?: return 0.2
+        return if (promotion.inferred) promotion.confidence * 0.75 else promotion.confidence.toDouble()
+    }
+
+    private fun noveltyScore(candidate: ExploreCandidate): Double {
+        val newConfidence = candidate.confidenceSignals.firstOrNull { it.label.equals("new", ignoreCase = true) }?.confidence?.toDouble() ?: 0.0
+        return when {
+            candidate.visitedBefore -> 0.15
+            candidate.recentlyOpenedOrTrending -> max(1.0, newConfidence)
+            newConfidence > 0.0 -> max(0.65, newConfidence)
+            else -> 0.75
+        }.coerceIn(0.0, 1.0)
     }
 
     private fun routeAlignmentScore(query: ExploreQuery, offRouteDistanceMeters: Double?): Double {
@@ -155,12 +177,16 @@ class ExploreRankingEngine {
         val signalCount = listOf(
             candidate.openNow,
             candidate.reviewSummary,
-            candidate.eventInfo,
-            candidate.promotionInfo,
+            candidate.primaryEvent,
+            candidate.primaryPromotion,
             candidate.quietScore,
-            candidate.accessible
+            candidate.accessible,
+            candidate.phoneNumber,
+            candidate.websiteUrl
         ).count { it != null }
-        val computed = (candidate.sourceConfidence + (signalCount * 0.04f) + (breakdown.values.average().toFloat() * 0.2f)).coerceIn(0.0f, 1.0f)
+        val confidenceSignals = candidate.confidenceSignals.map { if (it.inferred) it.confidence * 0.75f else it.confidence }
+        val confidenceSignalAverage = confidenceSignals.average().takeIf { !it.isNaN() }?.toFloat() ?: 0.7f
+        val computed = (candidate.sourceConfidence + (signalCount * 0.03f) + confidenceSignalAverage * 0.08f + (breakdown.values.average().toFloat() * 0.14f)).coerceIn(0.0f, 1.0f)
         return computed
     }
 
@@ -182,9 +208,10 @@ class ExploreRankingEngine {
             reasons += ExploreReason("Open now", "Open right now, which helps this suggestion stay practical.", breakdown["openNow"] ?: 0.0, 0.9f)
         }
         candidate.reviewSummary?.let { summary ->
+            val providerLabels = summary.sources.joinToString { it.providerLabel }
             reasons += ExploreReason(
                 title = "Reviews",
-                detail = "Review signal is solid at ${"%.1f".format(summary.averageRating)}★ across ${summary.totalCount} ratings.",
+                detail = "Review signal is solid at ${"%.1f".format(summary.averageRating)}★ across ${summary.totalCount} ratings${providerLabels.takeIf { it.isNotBlank() }?.let { " from $it" } ?: ""}.",
                 contribution = breakdown["reviews"] ?: 0.0,
                 confidence = 0.8f
             )
@@ -197,19 +224,19 @@ class ExploreRankingEngine {
                 confidence = 0.95f
             )
         }
-        candidate.eventInfo?.let { event ->
+        candidate.primaryEvent?.let { event ->
             reasons += ExploreReason(
                 title = "Timing",
-                detail = "Event timing helps: ${event.title} is happening soon or already underway.",
+                detail = "Event timing helps: ${event.title} is ${event.timing.name.lowercase().replace('_', ' ')}.",
                 contribution = breakdown["eventTiming"] ?: 0.0,
-                confidence = 0.75f
+                confidence = event.confidence
             )
         }
-        candidate.promotionInfo?.let { promo ->
+        candidate.primaryPromotion?.let { promo ->
             reasons += ExploreReason(
-                title = "Deal",
-                detail = "Promotion signal spotted: ${promo.summary}",
-                contribution = 0.7,
+                title = if (promo.inferred) "Possible deal" else "Deal",
+                detail = "${if (promo.inferred) "Inferred" else "Provider-backed"} promotion signal: ${promo.summary}",
+                contribution = breakdown["promotions"] ?: 0.0,
                 confidence = promo.confidence
             )
         }
@@ -220,6 +247,9 @@ class ExploreRankingEngine {
                 contribution = breakdown["routeAlignment"] ?: 0.0,
                 confidence = 0.85f
             )
+        }
+        candidate.whyChosenHints.forEach { hint ->
+            reasons += ExploreReason("Why this was chosen", hint, 0.5, candidate.sourceConfidence)
         }
         return reasons.sortedByDescending { it.contribution }
     }
