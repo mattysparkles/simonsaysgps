@@ -64,7 +64,12 @@ fun ExploreResultsScreen(
             onStartNavigation()
         },
         onSave = viewModel::saveExploreResult,
-        onSeeReviews = { result -> viewModel.noteExploreAction("Review detail stub: ${result.candidate.reviewSummary?.summary ?: "No review summary available yet."}") },
+        onSeeReviews = { result ->
+            val reviewText = result.candidate.reviewSummary?.sources?.joinToString(separator = " | ") {
+                "${it.providerLabel}: ${it.averageRating?.let { rating -> "%.1f".format(rating) + "★" } ?: "No rating"} (${it.reviewCount})"
+            } ?: "No review summary available yet."
+            viewModel.noteExploreAction("Review sources: $reviewText")
+        },
         onLeaveReview = { result -> viewModel.noteExploreAction("Leave-review flow stub for ${result.candidate.name}. Hook this to your review composer later.") }
     )
 }
@@ -152,15 +157,42 @@ private fun ExploreResultCard(
     onLeaveReview: () -> Unit
 ) {
     val candidate = result.candidate
+    val reviewSummary = candidate.reviewSummary
+    val sourcesText = candidate.sourceAttributions.joinToString { it.label }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(candidate.name, style = MaterialTheme.typography.titleLarge)
             Text(candidate.typeLabel, style = MaterialTheme.typography.labelLarge)
             Text(candidate.address)
-            Text(candidate.eventInfo?.summary ?: if (candidate.openNow == true) "Open now" else if (candidate.openNow == false) "Currently closed" else "Hours unknown")
+            Text(
+                candidate.primaryEvent?.summary
+                    ?: if (candidate.openNow == true) "Open now"
+                    else if (candidate.openNow == false) "Currently closed"
+                    else "Hours unknown"
+            )
             Text(result.offRouteDistanceMeters?.let { "${formatMiles(it)} miles off route" } ?: "${formatMiles(result.distanceMeters)} miles away")
-            Text(candidate.reviewSummary?.let { "${"%.1f".format(it.averageRating)}★ · ${it.totalCount} ratings" } ?: "Ratings unavailable")
-            Text(result.primaryWhyChosen, style = MaterialTheme.typography.bodyMedium)
+            reviewSummary?.let {
+                Text(
+                    buildString {
+                        append("${"%.1f".format(it.averageRating)}★")
+                        if (it.internalCount > 0) append(" · ${it.internalCount} Simon Says reviews first")
+                        if (it.thirdPartySources.isNotEmpty()) append(" · ${it.thirdPartySources.joinToString { source -> "${source.providerLabel} ${source.reviewCount}" }}")
+                    }
+                )
+            } ?: Text("Ratings unavailable")
+            candidate.primaryPromotion?.let {
+                Text("${if (it.inferred) "Possible sale" else "Sale"}: ${it.summary} (${(it.confidence * 100).toInt()}% confidence)")
+            }
+            Text("Why this was chosen: ${result.primaryWhyChosen}", style = MaterialTheme.typography.bodyMedium)
+            if (sourcesText.isNotBlank()) {
+                Text("Sources: $sourcesText", style = MaterialTheme.typography.bodySmall)
+            }
+            candidate.confidenceSignals.take(2).forEach { signal ->
+                Text(
+                    text = "${signal.label.replaceFirstChar { it.uppercase() }}: ${signal.detail} (${(signal.confidence * 100).toInt()}%${if (signal.inferred) ", inferred" else ""})",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onPreviewOnMap) {
                     Icon(Icons.Default.Map, contentDescription = null)

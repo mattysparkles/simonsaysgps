@@ -6,31 +6,39 @@ import com.simonsaysgps.domain.model.explore.ExplorePromotionInfo
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreQuery
 import com.simonsaysgps.domain.model.explore.ExploreRepositorySnapshot
-import com.simonsaysgps.domain.model.explore.ExploreReviewSummary
+import com.simonsaysgps.domain.model.explore.ExploreReviewSourceSummary
 
 interface ExploreRepository {
     suspend fun fetch(query: ExploreQuery): ExploreRepositorySnapshot
 }
 
-interface PlaceDataProvider {
+interface PlaceDiscoveryProvider {
+    val providerId: String
     suspend fun discoverPlaces(query: ExploreQuery): List<ExploreCandidate>
 }
 
-interface EventDataProvider {
-    suspend fun discoverEvents(query: ExploreQuery): Map<String, ExploreEventInfo>
+interface PlaceDetailsProvider {
+    val providerId: String
+    suspend fun enrichPlaces(query: ExploreQuery, candidates: List<ExploreCandidate>): Map<String, ExploreCandidate>
+}
+
+interface ReviewProvider {
+    val providerId: String
+    suspend fun reviews(query: ExploreQuery, candidates: List<ExploreCandidate>): Map<String, List<ExploreReviewSourceSummary>>
+}
+
+interface EventProvider {
+    val providerId: String
+    suspend fun events(query: ExploreQuery, candidates: List<ExploreCandidate>): Map<String, List<ExploreEventInfo>>
+}
+
+interface PromotionSignalProvider {
+    val providerId: String
+    suspend fun promotions(query: ExploreQuery, candidates: List<ExploreCandidate>): Map<String, List<ExplorePromotionInfo>>
 }
 
 interface UserVisitHistoryProvider {
-    suspend fun visitedPlaceIds(): Set<String>
-    suspend fun lastVisitedEpochMillis(placeId: String): Long?
-}
-
-interface ReviewsProvider {
-    suspend fun reviewSummaries(placeIds: List<String>): Map<String, ExploreReviewSummary>
-}
-
-interface PromotionsProvider {
-    suspend fun promotions(placeIds: List<String>): Map<String, ExplorePromotionInfo>
+    suspend fun enrichPlaces(candidates: List<ExploreCandidate>): Map<String, ExploreCandidate>
 }
 
 interface ExploreProviderHealthReporter {

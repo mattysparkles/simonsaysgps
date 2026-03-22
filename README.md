@@ -141,7 +141,7 @@ The app now includes an initial **Explore** experience built for clean architect
 
 - A top-level **Explore** entry with the prompt **“Take me Somewhere…”**.
 - Intent chips for: Delicious, Fun, Open Now, I've Never Been, Quiet, Outdoors, Important, Close to Home, On My Way, Special, New, I Can Shop, I Can Learn, Good for Kids, and Having a Sale.
-- A dedicated Explore results screen showing ranked cards with address, status/timing, distance or off-route distance, review summary, and a short explanation of why each suggestion was chosen.
+- A dedicated Explore results screen showing ranked cards with address, status/timing, distance or off-route distance, grouped review summaries, source attribution, confidence-labeled event/promotion signals, and a short explanation of why each suggestion was chosen.
 - Quick actions for preview on map, start navigation, save, see reviews, and leave review. The review actions are intentionally scaffolded as product-ready stubs in this phase.
 - A dedicated Explore settings screen persisted through DataStore.
 
@@ -150,7 +150,7 @@ The app now includes an initial **Explore** experience built for clean architect
 The Explore foundation is split across the existing module boundaries:
 
 - `:navigation` now owns the Explore domain models, provider contracts, heuristics, ranking engine, orchestrator abstraction, and ranking/unit tests.
-- `:app` owns DataStore persistence for `ExploreSettings`, demo/fake provider implementations, repository wiring, and the Compose Explore screens.
+- `:app` owns DataStore persistence for `ExploreSettings`, provider implementations and aggregation wiring, lightweight Explore caching, duplicate merging, and the Compose Explore screens.
 
 Core Explore contracts introduced in this PR:
 
@@ -162,16 +162,19 @@ Core Explore contracts introduced in this PR:
 - `ExploreReason`
 - `ExploreRepository`
 - `ExploreOrchestrator`
-- Provider interfaces for place discovery, event discovery, visit history, reviews, and promotions
+- Provider interfaces for place discovery, place details, reviews, events, promotions, and visit history enrichment
 
 ### Explore provider strategy in this phase
 
-This PR intentionally does **not** pretend every Explore signal is production-complete on day one. Instead:
+This PR intentionally keeps the architecture provider-ready without pretending every integration is equally mature:
 
-- A working provider path uses the existing current-location/map flow plus a nearby demo catalog that generates plausible places around the user.
-- Visit history is driven by existing recent-destination persistence so novelty and “I've Never Been” are already testable.
-- Event, review, and promotion providers are scaffolded with demo/fake data and status reporting.
-- Provider availability is surfaced in the UI so fallbacks are visible and debuggable.
+- **Fully implemented now:** a real Nominatim-backed place discovery + place-details enrichment path using public OpenStreetMap/Nominatim data.
+- **Scaffolded cleanly behind capability contracts:** curated review, event, and promotion providers plus internal recent-destination visit history enrichment.
+- **Aggregation now merges duplicates** across provider outputs using provider links, normalized names/addresses, phone numbers, and coordinate proximity.
+- **Source attribution and confidence metadata** flow through the repository, ranking engine, and Explore cards.
+- **Provider availability and partial failures** are surfaced in the UI so fallbacks remain visible and debuggable.
+
+See [`docs/explore_provider_integration.md`](docs/explore_provider_integration.md) for the provider matrix, setup expectations, attribution rules, and limitations.
 
 ### Explore settings now implemented
 
@@ -197,21 +200,24 @@ Persisted settings now include:
 
 Implemented now:
 
-- explainable ranking pipeline
-- demo providers and graceful fallback handling
-- Compose Explore shell, results, and settings UI
+- explainable ranking pipeline with open-now, event timing, rating confidence, route hooks, visit history, and confidence-labeled sale/newness inputs
+- real Nominatim-backed place discovery and detail enrichment
+- duplicate place merging with provider link preservation and source attribution
+- grouped review-source ordering with internal summaries first
+- partial provider failure handling plus lightweight Explore snapshot caching
+- Compose Explore shell, enriched results cards, and settings UI
 - first-run walkthrough stub
-- ranking/category/settings tests
+- ranking/category/settings/repository tests
 
 Still future work:
 
-- real external place/event/deal providers
-- production review and save/review-write backends
+- additional live review/event/deal providers beyond the current Nominatim place path
+- production review write-back and richer authenticated internal review storage
 - richer home-address search/selection flow
 - deeper route-detour estimation tied to routing-provider ETAs
 - analytics/telemetry and moderation around review content
 
-**No binary files were added in this Explore PR.**
+**No binary files were added in this Explore provider integration PR.**
 
 ## Simon Says rules
 
