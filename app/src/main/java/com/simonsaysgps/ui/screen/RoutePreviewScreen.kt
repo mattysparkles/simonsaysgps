@@ -40,7 +40,7 @@ fun RoutePreviewScreen(
         ) {
             TextButton(onClick = onBack) { Text("Back") }
             if (route == null) {
-                Text("No route loaded yet.")
+                Text(state.routeError ?: "No route loaded yet.", color = if (state.routeError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground)
                 return@Column
             }
             MapLibreMapView(
@@ -52,6 +52,12 @@ fun RoutePreviewScreen(
             InfoCard("Distance", DistanceFormatter.format(route.totalDistanceMeters, state.settings.distanceUnit))
             InfoCard("ETA", DateTimeFormatter.ofPattern("h:mm a").format(Instant.ofEpochSecond(route.etaEpochSeconds).atZone(ZoneId.systemDefault())))
             InfoCard("Maneuvers", "${route.maneuvers.size} turns")
+            state.routeInfo?.let {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            state.routeError?.let {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
             Text(
                 text = route.maneuvers.take(3).joinToString("\n") { "• ${it.instruction}" },
                 style = MaterialTheme.typography.bodyLarge

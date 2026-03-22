@@ -7,8 +7,12 @@ import com.simonsaysgps.data.location.DemoLocationRepository
 import com.simonsaysgps.data.location.FusedLocationRepository
 import com.simonsaysgps.domain.engine.SimonSaysEngine
 import com.simonsaysgps.domain.model.Coordinate
+import com.simonsaysgps.domain.model.FetchSource
 import com.simonsaysgps.domain.model.NavigationSessionState
+import com.simonsaysgps.domain.model.NetworkFailure
+import com.simonsaysgps.domain.model.NetworkFailureType
 import com.simonsaysgps.domain.model.PlaceResult
+import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.repository.GeocodingRepository
@@ -88,6 +92,7 @@ class AppViewModel @Inject constructor(
                 searchQuery = query,
                 searchResults = emptyList(),
                 searchError = null,
+                searchInfo = null,
                 searchInFlight = false,
                 searchStatus = SearchStatus.RECENTS
             )
@@ -97,6 +102,7 @@ class AppViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             searchQuery = query,
             searchError = null,
+            searchInfo = null,
             searchInFlight = false,
             searchStatus = SearchStatus.DEBOUNCING
         )
@@ -113,6 +119,7 @@ class AppViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 searchResults = emptyList(),
                 searchError = null,
+                searchInfo = null,
                 searchInFlight = false,
                 searchStatus = SearchStatus.RECENTS
             )
@@ -145,11 +152,26 @@ class AppViewModel @Inject constructor(
         val destination = _uiState.value.selectedPlace?.coordinate ?: return
         routeDestination = destination
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(routeLoading = true, routeError = null)
-            routingRepository.calculateRoute(origin, destination)
-                .map { simonSaysEngine.assignAuthorizations(it, settings.value.gameMode) }
-                .onSuccess { route -> _uiState.value = _uiState.value.copy(routePreview = route, routeLoading = false) }
-                .onFailure { error -> _uiState.value = _uiState.value.copy(routeError = error.message, routeLoading = false) }
+            _uiState.value = _uiState.value.copy(routeLoading = true, routeError = null, routeInfo = null)
+            when (val routeResult = routingRepository.calculateRoute(origin, destination)) {
+                is RepositoryResult.Success -> {
+                    val route = simonSaysEngine.assignAuthorizations(routeResult.value, settings.value.gameMode)
+                    _uiState.value = _uiState.value.copy(
+                        routePreview = route,
+                        routeLoading = false,
+                        routeInfo = routeMessageFor(routeResult.source, routeResult.fallbackFailure),
+                        routeError = null
+                    )
+                }
+
+                is RepositoryResult.Failure -> {
+                    _uiState.value = _uiState.value.copy(
+                        routeLoading = false,
+                        routeError = routeErrorMessage(routeResult.failure),
+                        routeInfo = null
+                    )
+                }
+            }
         }
     }
 
@@ -182,25 +204,30 @@ class AppViewModel @Inject constructor(
 
     private suspend fun performSearch(query: String) {
         if (query.isBlank() || query != _uiState.value.searchQuery) return
-        _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null, searchStatus = SearchStatus.LOADING)
-        geocodingRepository.search(query)
-            .onSuccess { results ->
+        _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null, searchInfo = null, searchStatus = SearchStatus.LOADING)
+        when (val result = geocodingRepository.search(query)) {
+            is RepositoryResult.Success -> {
                 if (query != _uiState.value.searchQuery) return
                 _uiState.value = _uiState.value.copy(
-                    searchResults = results,
+                    searchResults = result.value,
                     searchInFlight = false,
-                    searchStatus = if (results.isEmpty()) SearchStatus.EMPTY else SearchStatus.SUCCESS
+                    searchStatus = if (result.value.isEmpty()) SearchStatus.EMPTY else SearchStatus.SUCCESS,
+                    searchInfo = searchMessageFor(result.source, result.fallbackFailure),
+                    searchError = null
                 )
             }
-            .onFailure { error ->
+
+            is RepositoryResult.Failure -> {
                 if (query != _uiState.value.searchQuery) return
                 _uiState.value = _uiState.value.copy(
                     searchResults = emptyList(),
-                    searchError = error.message,
+                    searchError = searchErrorMessage(result.failure),
+                    searchInfo = null,
                     searchInFlight = false,
                     searchStatus = SearchStatus.ERROR
                 )
             }
+        }
     }
 
     private fun startLocationUpdates() {
@@ -268,23 +295,67 @@ class AppViewModel @Inject constructor(
         }
     }
 
-
     private fun triggerReroute(origin: Coordinate) {
         val destination = routeDestination ?: return
         viewModelScope.launch {
-            routingRepository.calculateRoute(origin, destination)
-                .map { simonSaysEngine.assignAuthorizations(it, settings.value.gameMode) }
-                .onSuccess { route ->
+            when (val routeResult = routingRepository.calculateRoute(origin, destination)) {
+                is RepositoryResult.Success -> {
+                    val route = simonSaysEngine.assignAuthorizations(routeResult.value, settings.value.gameMode)
                     val previousState = _uiState.value.navigationState
                     val updatedState = navigationUseCase.start(route)
-                    Log.i(TAG, "Reroute completed. maneuverCount=${route.maneuvers.size}")
+                    Log.i(TAG, "Reroute completed. maneuverCount=${route.maneuvers.size} source=${routeResult.source}")
                     _uiState.value = _uiState.value.copy(
                         routePreview = route,
-                        navigationState = updatedState
+                        navigationState = updatedState,
+                        routeInfo = routeMessageFor(routeResult.source, routeResult.fallbackFailure),
+                        routeError = null
                     )
                     syncForegroundService(previousState, updatedState)
                 }
+
+                is RepositoryResult.Failure -> {
+                    Log.w(TAG, "Reroute failed: ${routeResult.failure.type} ${routeResult.failure.detail}")
+                    _uiState.value = _uiState.value.copy(routeError = routeErrorMessage(routeResult.failure))
+                }
+            }
         }
+    }
+
+    private fun searchMessageFor(source: FetchSource, fallbackFailure: NetworkFailure?): String? {
+        return when {
+            source == FetchSource.CACHE && fallbackFailure != null -> "Showing cached search results because ${networkReasonLabel(fallbackFailure)}."
+            source == FetchSource.CACHE -> "Showing recently cached search results."
+            else -> null
+        }
+    }
+
+    private fun routeMessageFor(source: FetchSource, fallbackFailure: NetworkFailure?): String? {
+        return when {
+            source == FetchSource.CACHE && fallbackFailure != null -> "Using the latest saved route because ${networkReasonLabel(fallbackFailure)}."
+            source == FetchSource.CACHE -> "Using a recently cached route preview."
+            else -> null
+        }
+    }
+
+    private fun searchErrorMessage(failure: NetworkFailure): String = when (failure.type) {
+        NetworkFailureType.NO_NETWORK -> "No network connection. Search needs internet unless you already have cached results for this query."
+        NetworkFailureType.TIMEOUT -> "Search timed out. Please try again in a moment."
+        NetworkFailureType.SERVER -> "Search server error. Please try again shortly."
+        NetworkFailureType.UNKNOWN -> "Search failed unexpectedly. Please try again."
+    }
+
+    private fun routeErrorMessage(failure: NetworkFailure): String = when (failure.type) {
+        NetworkFailureType.NO_NETWORK -> "No network connection. Route calculation still needs internet unless this trip was cached recently."
+        NetworkFailureType.TIMEOUT -> "Route request timed out. Please try again."
+        NetworkFailureType.SERVER -> "Routing service error. Please try again shortly."
+        NetworkFailureType.UNKNOWN -> "Route request failed unexpectedly. Please try again."
+    }
+
+    private fun networkReasonLabel(failure: NetworkFailure): String = when (failure.type) {
+        NetworkFailureType.NO_NETWORK -> "the device is offline"
+        NetworkFailureType.TIMEOUT -> "the network request timed out"
+        NetworkFailureType.SERVER -> "the server did not respond successfully"
+        NetworkFailureType.UNKNOWN -> "the latest network request failed"
     }
 
     companion object {
@@ -307,7 +378,9 @@ data class AppUiState(
     val searchInFlight: Boolean = false,
     val routeLoading: Boolean = false,
     val searchError: String? = null,
+    val searchInfo: String? = null,
     val routeError: String? = null,
+    val routeInfo: String? = null,
     val lastPrompt: String? = null,
     val settings: SettingsModel = SettingsModel()
 )

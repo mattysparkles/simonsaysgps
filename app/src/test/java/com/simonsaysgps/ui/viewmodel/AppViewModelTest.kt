@@ -8,7 +8,11 @@ import com.simonsaysgps.domain.engine.TurnDetector
 import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.ManeuverAuthorization
+import com.simonsaysgps.domain.model.FetchSource
+import com.simonsaysgps.domain.model.NetworkFailure
+import com.simonsaysgps.domain.model.NetworkFailureType
 import com.simonsaysgps.domain.model.PlaceResult
+import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SettingsModel
@@ -118,7 +122,7 @@ class AppViewModelTest {
     @Test
     fun `search query is debounced before geocoding`() = runTest(dispatcher) {
         val geocodingRepository = FakeGeocodingRepository(
-            responses = mapOf("san francisco" to Result.success(listOf(destinationPlace())))
+            responses = mapOf("san francisco" to RepositoryResult.Success(listOf(destinationPlace()), FetchSource.NETWORK))
         )
         val viewModel = createViewModel(geocodingRepository = geocodingRepository)
 
@@ -167,6 +171,72 @@ class AppViewModelTest {
         assertThat(viewModel.uiState.value.searchStatus).isEqualTo(SearchStatus.RECENTS)
     }
 
+
+    @Test
+    fun `cached search fallback surfaces offline message without failing UI`() = runTest(dispatcher) {
+        val geocodingRepository = FakeGeocodingRepository(
+            responses = mapOf(
+                "san francisco" to RepositoryResult.Success(
+                    value = listOf(destinationPlace()),
+                    source = FetchSource.CACHE,
+                    fallbackFailure = NetworkFailure(NetworkFailureType.NO_NETWORK)
+                )
+            )
+        )
+        val viewModel = createViewModel(geocodingRepository = geocodingRepository)
+
+        viewModel.updateSearchQuery("san francisco")
+        advanceTimeBy(AppViewModel.SEARCH_DEBOUNCE_MS)
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.searchStatus).isEqualTo(SearchStatus.SUCCESS)
+        assertThat(viewModel.uiState.value.searchInfo).contains("cached search results")
+        assertThat(viewModel.uiState.value.searchError).isNull()
+    }
+
+    @Test
+    fun `route failures distinguish timeout from empty results`() = runTest(dispatcher) {
+        val geocodingRepository = FakeGeocodingRepository()
+        val routingRepository = mockk<RoutingRepository>()
+        val locationFlow = MutableSharedFlow<LocationSample>(extraBufferCapacity = 4)
+        val fusedLocationRepository = mockk<FusedLocationRepository>()
+        val demoLocationRepository = mockk<DemoLocationRepository>()
+        val serviceController = FakeNavigationForegroundServiceController()
+        val voicePromptManager = mockk<VoicePromptManager>(relaxed = true)
+        val settingsRepository = FakeSettingsRepository()
+        val engine = SimonSaysEngine(TurnDetector(), PromptFactory())
+        val navigationUseCase = ObserveNavigationSessionUseCase(routingRepository = routingRepository, simonSaysEngine = engine)
+
+        every { fusedLocationRepository.locationUpdates() } returns locationFlow
+        every { demoLocationRepository.locationUpdates() } returns locationFlow
+        coEvery { routingRepository.calculateRoute(any(), any()) } returns RepositoryResult.Failure(NetworkFailure(NetworkFailureType.TIMEOUT))
+
+        val viewModel = AppViewModel(
+            geocodingRepository = geocodingRepository,
+            recentDestinationRepository = FakeRecentDestinationRepository(),
+            routingRepository = routingRepository,
+            settingsRepository = settingsRepository,
+            fusedLocationRepository = fusedLocationRepository,
+            demoLocationRepository = demoLocationRepository,
+            navigationUseCase = navigationUseCase,
+            simonSaysEngine = engine,
+            voicePromptManager = voicePromptManager,
+            navigationForegroundServiceController = serviceController
+        )
+
+        viewModel.onLocationPermissionResult(true)
+        locationFlow.emit(sample(0.0, 0.0, 0f))
+        advanceUntilIdle()
+        viewModel.selectPlace(destinationPlace())
+        advanceUntilIdle()
+
+        viewModel.requestRoute()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.routePreview).isNull()
+        assertThat(viewModel.uiState.value.routeError).contains("timed out")
+    }
+
     private fun createViewModel(
         locationFlow: Flow<LocationSample> = MutableSharedFlow(extraBufferCapacity = 4),
         serviceController: NavigationForegroundServiceController = FakeNavigationForegroundServiceController(),
@@ -187,7 +257,7 @@ class AppViewModelTest {
 
         every { fusedLocationRepository.locationUpdates() } returns locationFlow
         every { demoLocationRepository.locationUpdates() } returns locationFlow
-        coEvery { routingRepository.calculateRoute(any(), any()) } returns Result.success(route)
+        coEvery { routingRepository.calculateRoute(any(), any()) } returns RepositoryResult.Success(route, FetchSource.NETWORK)
 
         return AppViewModel(
             geocodingRepository = geocodingRepository,
@@ -255,13 +325,13 @@ class AppViewModelTest {
     }
 
     private class FakeGeocodingRepository(
-        private val responses: Map<String, Result<List<PlaceResult>>> = emptyMap()
+        private val responses: Map<String, RepositoryResult<List<PlaceResult>>> = emptyMap()
     ) : GeocodingRepository {
         val queries = mutableListOf<String>()
 
-        override suspend fun search(query: String): Result<List<PlaceResult>> {
+        override suspend fun search(query: String): RepositoryResult<List<PlaceResult>> {
             queries += query
-            return responses[query] ?: Result.success(emptyList())
+            return responses[query] ?: RepositoryResult.Success(emptyList(), FetchSource.NETWORK)
         }
     }
 

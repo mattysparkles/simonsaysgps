@@ -4,11 +4,16 @@ import com.simonsaysgps.BuildConfig
 import com.simonsaysgps.data.remote.NominatimApi
 import com.simonsaysgps.data.remote.OsrmApi
 import com.simonsaysgps.data.repository.DataStoreRecentDestinationRepository
+import com.simonsaysgps.data.repository.DataStoreRouteCacheStore
+import com.simonsaysgps.data.repository.DataStoreSearchCacheStore
+import com.simonsaysgps.data.repository.RetryOnFailureInterceptor
 import com.simonsaysgps.data.repository.DataStoreSettingsRepository
 import com.simonsaysgps.data.repository.NominatimGeocodingRepository
 import com.simonsaysgps.data.repository.OsrmRoutingRepository
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
+import com.simonsaysgps.domain.repository.RouteCacheStore
+import com.simonsaysgps.domain.repository.SearchCacheStore
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -38,6 +43,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+        .addInterceptor(RetryOnFailureInterceptor())
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .addInterceptor { chain ->
             chain.proceed(
@@ -89,6 +98,12 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindRecentDestinationRepository(impl: DataStoreRecentDestinationRepository): RecentDestinationRepository
+
+    @Binds
+    abstract fun bindSearchCacheStore(impl: DataStoreSearchCacheStore): SearchCacheStore
+
+    @Binds
+    abstract fun bindRouteCacheStore(impl: DataStoreRouteCacheStore): RouteCacheStore
 
     @Binds
     abstract fun bindVoicePromptManager(impl: AndroidVoicePromptManager): VoicePromptManager
