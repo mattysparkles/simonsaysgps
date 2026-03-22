@@ -20,6 +20,7 @@ import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
+import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,7 +45,8 @@ class AppViewModel @Inject constructor(
     private val navigationUseCase: ObserveNavigationSessionUseCase,
     private val simonSaysEngine: SimonSaysEngine,
     private val voicePromptManager: VoicePromptManager,
-    private val navigationForegroundServiceController: NavigationForegroundServiceController
+    private val navigationForegroundServiceController: NavigationForegroundServiceController,
+    private val navigationSessionOrchestrator: NavigationSessionOrchestrator
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -60,6 +62,20 @@ class AppViewModel @Inject constructor(
     private var searchJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            val restoredSession = navigationSessionOrchestrator.restoreSession()
+            if (restoredSession?.navigationActive == true && !_uiState.value.navigationState.navigationActive) {
+                routeDestination = restoredSession.route?.geometry?.lastOrNull()
+                _uiState.value = _uiState.value.copy(
+                    routePreview = restoredSession.route,
+                    navigationState = restoredSession,
+                    currentLocation = restoredSession.currentLocation ?: _uiState.value.currentLocation,
+                    isLoading = false
+                )
+                navigationSessionOrchestrator.ensureForegroundService("restored persisted navigation session")
+            }
+        }
+
         viewModelScope.launch {
             settings.collect { updated ->
                 _uiState.value = _uiState.value.copy(settings = updated, isLoading = false)
@@ -186,6 +202,7 @@ class AppViewModel @Inject constructor(
         Log.i(TAG, "Navigation started. routeManeuvers=${route.maneuvers.size}")
         _uiState.value = _uiState.value.copy(navigationState = updatedState)
         navigationForegroundServiceController.start("turn-by-turn navigation began")
+        viewModelScope.launch { navigationSessionOrchestrator.syncSession(updatedState) }
     }
 
     fun endNavigation(reason: String = "navigation cancelled") {
@@ -196,6 +213,7 @@ class AppViewModel @Inject constructor(
             navigationForegroundServiceController.stop(reason)
         }
         _uiState.value = _uiState.value.copy(navigationState = NavigationSessionState())
+        viewModelScope.launch { navigationSessionOrchestrator.syncSession(NavigationSessionState()) }
     }
 
     fun updateSettings(transform: (SettingsModel) -> SettingsModel) {
@@ -257,6 +275,9 @@ class AppViewModel @Inject constructor(
                     navigationState = updatedNavigation,
                     lastPrompt = updatedNavigation.spokenPrompt ?: _uiState.value.lastPrompt
                 )
+                if (currentState.navigationActive || updatedNavigation.navigationActive) {
+                    navigationSessionOrchestrator.syncSession(updatedNavigation)
+                }
                 if (simonSaysEngine.shouldReroute(updatedNavigation)) {
                     triggerReroute(location.coordinate)
                 }
@@ -310,6 +331,7 @@ class AppViewModel @Inject constructor(
                         routeInfo = routeMessageFor(routeResult.source, routeResult.fallbackFailure),
                         routeError = null
                     )
+                    navigationSessionOrchestrator.syncSession(updatedState)
                     syncForegroundService(previousState, updatedState)
                 }
 

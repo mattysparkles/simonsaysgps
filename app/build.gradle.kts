@@ -100,7 +100,11 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:11.7.1")
 
     implementation("androidx.datastore:datastore-preferences:1.1.4")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
+    implementation("androidx.hilt:hilt-work:1.2.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
