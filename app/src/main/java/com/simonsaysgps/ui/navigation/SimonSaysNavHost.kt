@@ -42,7 +42,7 @@ fun SimonSaysNavHost(
             ActiveNavigationScreen(
                 viewModel = appViewModel,
                 onBack = {
-                    appViewModel.endNavigation()
+                    appViewModel.endNavigation("navigation cancelled from UI")
                     navController.popBackStack(Screen.Map.route, false)
                 }
             )
