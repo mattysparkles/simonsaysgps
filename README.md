@@ -28,10 +28,19 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 
 ## Project structure
 
-- `app/src/main/java/com/simonsaysgps/data`: network, repositories, routing provider adapters, and location providers.
-- `app/src/main/java/com/simonsaysgps/domain`: models, routing/game engine, provider-selection abstractions, and utilities.
-- `app/src/main/java/com/simonsaysgps/ui`: Compose screens, components, navigation, and view models.
-- `app/src/test/java/com/simonsaysgps`: unit tests for Simon Says behavior and routing abstractions.
+The codebase is now split into a small set of Gradle modules so navigation logic and provider integrations can evolve independently without turning the app module into a catch-all:
+
+- `:app`: Android entry point, Compose UI, Hilt wiring, location implementations, DataStore persistence, foreground service orchestration, and instrumentation tests.
+- `:navigation`: shared navigation/domain code including models, Simon Says engine, prompt generation, repository contracts, provider-selection logic, and navigation use cases.
+- `:providers`: network-facing provider integrations including Nominatim geocoding, OSRM routing, GraphHopper routing, Retrofit APIs, and provider networking helpers.
+
+Source roots now map cleanly onto those boundaries:
+
+- `app/src/main/java/com/simonsaysgps`: app wiring/UI plus Android-specific infrastructure.
+- `navigation/src/main/java/com/simonsaysgps/domain`: reusable navigation/domain engine and contracts.
+- `navigation/src/main/java/com/simonsaysgps/data/repository`: provider-selection configuration and routing-repository delegation.
+- `providers/src/main/java/com/simonsaysgps/data`: provider adapters plus remote API DTOs.
+- `navigation/src/test`, `providers/src/test`, and `app/src/test`: unit tests aligned with each module's responsibility.
 - `app/src/androidTest/java/com/simonsaysgps`: deterministic Compose instrumentation coverage for key UI flows and optional screenshot export.
 
 ## Setup
@@ -153,7 +162,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Valhalla is scaffolded for selection/configuration but not yet implemented as a concrete routing adapter.
 - Offline support in this phase is intentionally lightweight: repeated destination queries and the latest matching route preview are cached, but the app does not perform full offline routing.
 - Turn detection heuristics currently use route proximity, bearing deltas, and step proximity; they are intentionally understandable rather than fully map-matched.
-- The initial implementation keeps most functionality in one Android app module for repo simplicity.
+- Navigation/domain logic now lives in `:navigation`, while external routing/geocoding adapters live in `:providers`, leaving `:app` focused on Android wiring and UI.
 - Map overlay styling is intentionally lightweight for phase 1.
 - The foreground navigation service now starts automatically when active guidance begins and stops automatically when guidance ends, arrives, or is cancelled.
 - Active navigation sessions are now snapshotted to DataStore and can be restored after app reopen or process recreation, with WorkManager providing deferred recovery checks for long-running trips.
@@ -172,7 +181,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 
 ## Future improvements
 
-- Add a dedicated `navigation` module and split provider integrations into separate Gradle modules.
+- Keep trimming Android-specific concerns out of `:navigation` as the app grows, while avoiding unnecessary module sprawl.
 - Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
 - Add lane guidance, arrival state, and richer maneuver banners.
 - Expand the partial Valhalla scaffold into a concrete adapter.

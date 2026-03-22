@@ -18,3 +18,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "SimonSaysGPS"
 include(":app")
+include(":navigation")
+include(":providers")
