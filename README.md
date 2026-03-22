@@ -4,7 +4,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 
 ## What the app does
 
-- Search for destinations with Nominatim.
+- Search for destinations with debounced Nominatim queries and recent destination shortcuts.
 - Preview an OSM route on an OpenStreetMap/MapLibre map.
 - Start navigation with spoken prompts powered by Android TextToSpeech.
 - Automatically start and stop the foreground navigation service with the active turn-by-turn session.
@@ -20,7 +20,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Map rendering:** MapLibre Android SDK with an OSM-friendly public style URL placeholder.
 - **Routing:** OSRM HTTP API through a swappable `RoutingRepository` abstraction.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
-- **Persistence:** DataStore for settings.
+- **Persistence:** DataStore for settings and recent destinations.
 - **Location:** Fused Location Provider, plus a demo simulator for emulator testing.
 
 ## Project structure
@@ -73,7 +73,7 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 
 - Enable **Demo mode** to use a fake location stream in the emulator.
 - Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason.
-- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, and routing repository mapping behavior.
+- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, routing repository mapping behavior, search debouncing, and recent destination persistence/mapping behavior.
 
 ## Known limitations
 
@@ -85,7 +85,7 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 
 ## Phase 1 delivered
 
-- Destination search.
+- Destination search with debounced lookups and recent destination storage.
 - Map preview.
 - Route calculation.
 - Active navigation UI.
@@ -108,6 +108,5 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 ## TODOs
 
 - Add user-selectable prompt personalities.
-- Add search result debouncing and recent destinations.
 - Tighten missed-turn detection to avoid jitter-driven reroutes.
 - Add offline caches and resilient networking.

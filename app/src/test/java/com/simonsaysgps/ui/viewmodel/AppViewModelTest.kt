@@ -14,6 +14,7 @@ import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.model.TurnType
 import com.simonsaysgps.domain.repository.GeocodingRepository
+import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -113,14 +115,67 @@ class AppViewModelTest {
         verify { voicePromptManager.speak(any()) }
     }
 
+    @Test
+    fun `search query is debounced before geocoding`() = runTest(dispatcher) {
+        val geocodingRepository = FakeGeocodingRepository(
+            responses = mapOf("san francisco" to Result.success(listOf(destinationPlace())))
+        )
+        val viewModel = createViewModel(geocodingRepository = geocodingRepository)
+
+        viewModel.updateSearchQuery("san")
+        advanceTimeBy(AppViewModel.SEARCH_DEBOUNCE_MS / 2)
+        viewModel.updateSearchQuery("san fran")
+        advanceTimeBy(AppViewModel.SEARCH_DEBOUNCE_MS / 2)
+        viewModel.updateSearchQuery("san francisco")
+        advanceTimeBy(AppViewModel.SEARCH_DEBOUNCE_MS - 1)
+        advanceUntilIdle()
+
+        assertThat(geocodingRepository.queries).isEmpty()
+        assertThat(viewModel.uiState.value.searchStatus).isEqualTo(SearchStatus.DEBOUNCING)
+
+        advanceTimeBy(1)
+        advanceUntilIdle()
+
+        assertThat(geocodingRepository.queries).containsExactly("san francisco")
+        assertThat(viewModel.uiState.value.searchResults).containsExactly(destinationPlace())
+        assertThat(viewModel.uiState.value.searchStatus).isEqualTo(SearchStatus.SUCCESS)
+    }
+
+    @Test
+    fun `selecting and clearing recent destinations updates repository-backed state`() = runTest(dispatcher) {
+        val recentRepository = FakeRecentDestinationRepository()
+        val placeOne = destinationPlace()
+        val placeTwo = destinationPlace(id = "coffee", name = "Coffee Shop")
+        val viewModel = createViewModel(recentDestinationRepository = recentRepository)
+
+        viewModel.selectPlace(placeOne)
+        advanceUntilIdle()
+        viewModel.selectPlace(placeTwo)
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.recentDestinations).containsExactly(placeTwo, placeOne).inOrder()
+
+        viewModel.removeRecentDestination(placeOne.id)
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.recentDestinations).containsExactly(placeTwo)
+
+        viewModel.clearRecentDestinations()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.recentDestinations).isEmpty()
+        assertThat(viewModel.uiState.value.searchStatus).isEqualTo(SearchStatus.RECENTS)
+    }
+
     private fun createViewModel(
-        locationFlow: Flow<LocationSample>,
-        serviceController: NavigationForegroundServiceController,
-        voicePromptManager: VoicePromptManager,
-        route: Route
+        locationFlow: Flow<LocationSample> = MutableSharedFlow(extraBufferCapacity = 4),
+        serviceController: NavigationForegroundServiceController = FakeNavigationForegroundServiceController(),
+        voicePromptManager: VoicePromptManager = mockk(relaxed = true),
+        route: Route = routeWithSingleManeuver(),
+        geocodingRepository: GeocodingRepository = FakeGeocodingRepository(),
+        recentDestinationRepository: RecentDestinationRepository = FakeRecentDestinationRepository()
     ): AppViewModel {
         val routingRepository = mockk<RoutingRepository>()
-        val geocodingRepository = mockk<GeocodingRepository>()
         val fusedLocationRepository = mockk<FusedLocationRepository>()
         val demoLocationRepository = mockk<DemoLocationRepository>()
         val settingsRepository = FakeSettingsRepository()
@@ -136,6 +191,7 @@ class AppViewModelTest {
 
         return AppViewModel(
             geocodingRepository = geocodingRepository,
+            recentDestinationRepository = recentDestinationRepository,
             routingRepository = routingRepository,
             settingsRepository = settingsRepository,
             fusedLocationRepository = fusedLocationRepository,
@@ -172,10 +228,13 @@ class AppViewModelTest {
         etaEpochSeconds = 1L
     )
 
-    private fun destinationPlace() = PlaceResult(
-        id = "dest",
-        name = "Destination",
-        fullAddress = "Destination Address",
+    private fun destinationPlace(
+        id: String = "dest",
+        name: String = "Destination"
+    ) = PlaceResult(
+        id = id,
+        name = name,
+        fullAddress = "$name Address",
         coordinate = Coordinate(0.0001, 0.0001)
     )
 
@@ -192,6 +251,35 @@ class AppViewModelTest {
 
         override suspend fun update(transform: (SettingsModel) -> SettingsModel) {
             settings.value = transform(settings.value)
+        }
+    }
+
+    private class FakeGeocodingRepository(
+        private val responses: Map<String, Result<List<PlaceResult>>> = emptyMap()
+    ) : GeocodingRepository {
+        val queries = mutableListOf<String>()
+
+        override suspend fun search(query: String): Result<List<PlaceResult>> {
+            queries += query
+            return responses[query] ?: Result.success(emptyList())
+        }
+    }
+
+    private class FakeRecentDestinationRepository : RecentDestinationRepository {
+        private val recent = MutableStateFlow<List<PlaceResult>>(emptyList())
+
+        override val recentDestinations: Flow<List<PlaceResult>> = recent
+
+        override suspend fun save(place: PlaceResult) {
+            recent.value = listOf(place) + recent.value.filterNot { it.id == place.id }
+        }
+
+        override suspend fun remove(placeId: String) {
+            recent.value = recent.value.filterNot { it.id == placeId }
+        }
+
+        override suspend fun clear() {
+            recent.value = emptyList()
         }
     }
 
