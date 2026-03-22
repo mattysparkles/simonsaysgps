@@ -33,10 +33,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.PlaceResult
 import com.simonsaysgps.ui.components.MapLibreMapView
+import com.simonsaysgps.ui.test.UiTestTags
+import com.simonsaysgps.ui.viewmodel.AppUiState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 import com.simonsaysgps.ui.viewmodel.SearchStatus
 
@@ -49,7 +52,45 @@ fun MapSearchScreen(
     requestLocationPermission: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
+    MapSearchScreenContent(
+        state = state,
+        onSearchQueryChange = viewModel::updateSearchQuery,
+        onSearch = viewModel::search,
+        onPlaceSelected = viewModel::selectPlace,
+        onPreviewRoute = {
+            viewModel.requestRoute()
+            onRouteReady()
+        },
+        onSettingsClick = onSettingsClick,
+        onRequestLocationPermission = requestLocationPermission,
+        onRemoveRecentDestination = viewModel::removeRecentDestination,
+        onClearRecentDestinations = viewModel::clearRecentDestinations
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MapSearchScreenContent(
+    state: AppUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onPlaceSelected: (PlaceResult) -> Unit,
+    onPreviewRoute: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onRequestLocationPermission: () -> Unit,
+    onRemoveRecentDestination: (String) -> Unit,
+    onClearRecentDestinations: () -> Unit,
+    mapContent: @Composable (Modifier) -> Unit = { modifier ->
+        MapLibreMapView(
+            modifier = modifier,
+            currentLocation = state.currentLocation?.coordinate,
+            selectedLocation = state.selectedPlace?.coordinate,
+            routeGeometry = state.routePreview?.geometry.orEmpty()
+        )
+    }
+) {
     Scaffold(
+        modifier = Modifier.testTag(UiTestTags.MAP_SEARCH_SCREEN),
         topBar = {
             TopAppBar(
                 title = { Text("Simon Says GPS") },
@@ -68,13 +109,13 @@ fun MapSearchScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Location permission is needed for real navigation.")
-                        Button(onClick = requestLocationPermission) { Text("Grant location") }
+                        Button(onClick = onRequestLocationPermission) { Text("Grant location") }
                     }
                 }
             }
             OutlinedTextField(
                 value = state.searchQuery,
-                onValueChange = viewModel::updateSearchQuery,
+                onValueChange = onSearchQueryChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Search destination") },
                 supportingText = {
@@ -87,20 +128,15 @@ fun MapSearchScreen(
                         SearchStatus.SUCCESS -> Text(state.searchInfo ?: "Select a destination to preview a route.")
                     }
                 },
-                trailingIcon = { IconButton(onClick = viewModel::search) { Icon(Icons.Default.Search, contentDescription = null) } }
+                trailingIcon = { IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = null) } }
             )
-            MapLibreMapView(
-                modifier = Modifier.fillMaxWidth().height(280.dp),
-                currentLocation = state.currentLocation?.coordinate,
-                selectedLocation = state.selectedPlace?.coordinate,
-                routeGeometry = state.routePreview?.geometry.orEmpty()
-            )
+            mapContent(Modifier.fillMaxWidth().height(280.dp))
             state.selectedPlace?.let {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(it.name, style = MaterialTheme.typography.titleMedium)
                         Text(it.fullAddress, style = MaterialTheme.typography.bodyMedium)
-                        Button(onClick = { viewModel.requestRoute(); onRouteReady() }, modifier = Modifier.padding(top = 8.dp)) {
+                        Button(onClick = onPreviewRoute, modifier = Modifier.padding(top = 8.dp)) {
                             Text("Preview route")
                         }
                     }
@@ -113,9 +149,9 @@ fun MapSearchScreen(
                 recentDestinations = state.recentDestinations,
                 searchError = state.searchError,
                 searchInfo = state.searchInfo,
-                onPlaceSelected = viewModel::selectPlace,
-                onRemoveRecentDestination = viewModel::removeRecentDestination,
-                onClearRecentDestinations = viewModel::clearRecentDestinations
+                onPlaceSelected = onPlaceSelected,
+                onRemoveRecentDestination = onRemoveRecentDestination,
+                onClearRecentDestinations = onClearRecentDestinations
             )
         }
     }
