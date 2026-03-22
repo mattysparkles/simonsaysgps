@@ -15,6 +15,8 @@ import com.simonsaysgps.domain.model.PlaceResult
 import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.SettingsModel
+import com.simonsaysgps.domain.model.VisitHistoryEntry
+import com.simonsaysgps.domain.model.VisitObservationSource
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreQuery
@@ -24,8 +26,10 @@ import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
+import com.simonsaysgps.domain.repository.VisitHistoryRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
+import com.simonsaysgps.domain.service.RoutingSupportAdvisor
 import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
@@ -53,7 +57,8 @@ class AppViewModel @Inject constructor(
     private val voicePromptManager: VoicePromptManager,
     private val navigationForegroundServiceController: NavigationForegroundServiceController,
     private val navigationSessionOrchestrator: NavigationSessionOrchestrator,
-    private val exploreOrchestrator: ExploreOrchestrator
+    private val exploreOrchestrator: ExploreOrchestrator,
+    private val visitHistoryRepository: VisitHistoryRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -68,6 +73,7 @@ class AppViewModel @Inject constructor(
     private var routeDestination: Coordinate? = null
     private var searchJob: Job? = null
     private var exploreJob: Job? = null
+    private var lastRecordedVisitPlaceId: String? = null
 
     init {
         viewModelScope.launch {
@@ -106,6 +112,11 @@ class AppViewModel @Inject constructor(
                         hasRecentDestinations = recentDestinations.isNotEmpty()
                     )
                 )
+            }
+        }
+        viewModelScope.launch {
+            visitHistoryRepository.visitHistory.collect { visits ->
+                _uiState.value = _uiState.value.copy(visitHistory = visits)
             }
         }
     }
@@ -169,8 +180,9 @@ class AppViewModel @Inject constructor(
 
     fun saveExploreResult(result: ExploreResult) {
         selectPlaceInternal(result.toPlaceResult(), saveRecent = true)
+        recordVisitForPlace(result.toPlaceResult(), VisitObservationSource.APP_CONFIRMED_SAVE, 0.82f, "Saved from Explore")
         _uiState.value = _uiState.value.copy(
-            explore = _uiState.value.explore.copy(actionMessage = "Saved ${result.candidate.name} to recent destinations.")
+            explore = _uiState.value.explore.copy(actionMessage = "Saved ${result.candidate.name} to recent destinations and first-party visit history.")
         )
     }
 
@@ -258,6 +270,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun removeVisitHistoryPlace(placeId: String) {
+        viewModelScope.launch { visitHistoryRepository.remove(placeId) }
+    }
+
+    fun clearVisitHistory() {
+        viewModelScope.launch { visitHistoryRepository.clear() }
+    }
+
     fun requestRoute() {
         val origin = _uiState.value.currentLocation?.coordinate ?: return
         val destination = _uiState.value.selectedPlace?.coordinate ?: return
@@ -270,7 +290,7 @@ class AppViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         routePreview = route,
                         routeLoading = false,
-                        routeInfo = routeMessageFor(routeResult.source, routeResult.fallbackFailure),
+                        routeInfo = composeRouteInfo(routeResult.source, routeResult.fallbackFailure),
                         routeError = null
                     )
                 }
@@ -330,6 +350,11 @@ class AppViewModel @Inject constructor(
         noteExploreAction("Saved your current location as Explore home.")
     }
 
+    fun clearExploreHome() {
+        updateExploreSettings { current -> current.copy(homeLabel = "", homeCoordinate = null) }
+        noteExploreAction("Cleared your Explore home anchor.")
+    }
+
     private suspend fun performSearch(query: String) {
         if (query.isBlank() || query != _uiState.value.searchQuery) return
         _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null, searchInfo = null, searchStatus = SearchStatus.LOADING)
@@ -385,6 +410,11 @@ class AppViewModel @Inject constructor(
                     navigationState = updatedNavigation,
                     lastPrompt = updatedNavigation.spokenPrompt ?: _uiState.value.lastPrompt
                 )
+                if (currentState.arrivalStatus != com.simonsaysgps.domain.model.ArrivalStatus.ARRIVED && updatedNavigation.arrivalStatus == com.simonsaysgps.domain.model.ArrivalStatus.ARRIVED) {
+                    _uiState.value.selectedPlace?.let { place ->
+                        recordVisitForPlace(place, VisitObservationSource.APP_CONFIRMED_ARRIVAL, 0.96f, "Navigation arrival confirmed")
+                    }
+                }
                 if (currentState.navigationActive || updatedNavigation.navigationActive) {
                     navigationSessionOrchestrator.syncSession(updatedNavigation)
                 }
@@ -438,7 +468,7 @@ class AppViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         routePreview = route,
                         navigationState = updatedState,
-                        routeInfo = routeMessageFor(routeResult.source, routeResult.fallbackFailure),
+                        routeInfo = composeRouteInfo(routeResult.source, routeResult.fallbackFailure),
                         routeError = null
                     )
                     navigationSessionOrchestrator.syncSession(updatedState)
@@ -480,6 +510,46 @@ class AppViewModel @Inject constructor(
             source == FetchSource.CACHE && fallbackFailure != null -> "Using the latest saved route because ${networkReasonLabel(fallbackFailure)}."
             source == FetchSource.CACHE -> "Using a recently cached route preview."
             else -> null
+        }
+    }
+
+    private fun composeRouteInfo(source: FetchSource, fallbackFailure: NetworkFailure?): String {
+        val plan = RoutingSupportAdvisor.plan(settings.value)
+        val parts = listOfNotNull(
+            routeMessageFor(source, fallbackFailure),
+            "Transport profile: ${settings.value.routingPreferences.transportProfile.displayName}.",
+            "Requested route styles: ${plan.requestedStyles.joinToString()}.",
+            plan.advisory.summary.takeIf { plan.advisory.limitations.isNotEmpty() }
+        )
+        return parts.joinToString(" ")
+    }
+
+
+    private fun recordVisitForPlace(
+        place: PlaceResult,
+        source: VisitObservationSource,
+        confidence: Float,
+        notes: String
+    ) {
+        if (lastRecordedVisitPlaceId == place.id && source == VisitObservationSource.APP_CONFIRMED_ARRIVAL) return
+        if (!_uiState.value.settings.exploreSettings.visitHistoryEnabled) return
+        if (source == VisitObservationSource.APP_CONFIRMED_ARRIVAL) {
+            lastRecordedVisitPlaceId = place.id
+        }
+        viewModelScope.launch {
+            visitHistoryRepository.record(
+                VisitHistoryEntry(
+                    id = "visit-${place.id}-${System.currentTimeMillis()}",
+                    placeId = place.id,
+                    name = place.name,
+                    address = place.fullAddress,
+                    coordinate = place.coordinate,
+                    visitedAtEpochMillis = System.currentTimeMillis(),
+                    confidence = confidence,
+                    source = source,
+                    notes = notes
+                )
+            )
         }
     }
 
@@ -542,6 +612,7 @@ data class AppUiState(
     val routeInfo: String? = null,
     val lastPrompt: String? = null,
     val settings: SettingsModel = SettingsModel(),
+    val visitHistory: List<VisitHistoryEntry> = emptyList(),
     val explore: ExploreUiState = ExploreUiState()
 )
 

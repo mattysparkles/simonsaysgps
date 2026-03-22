@@ -89,3 +89,47 @@ When surfacing provider-backed Explore results:
 ## Binary file confirmation
 
 No binary files were added by this Explore provider integration work.
+
+## Personalization layer added in this PR
+
+### First-party visit history
+
+- Visit history is local-first and stored by Simon Says GPS itself.
+- Entries come from app-confirmed saves and app-confirmed arrivals in this build.
+- Explore settings exposes enable/disable, retention controls, per-place deletion, and clear-all history.
+- The data model leaves room for future importers, but this repo does **not** assume a Google Maps Timeline API integration exists.
+
+### I've Never Been
+
+- Confident matches in first-party visit history are filtered out.
+- Lower-confidence matches are marked as uncertain so the app does not overclaim identity resolution.
+- Unvisited places get explicit "Not visited yet" reasoning on Explore result cards.
+
+### Close to Home
+
+- Uses the saved home anchor and a configurable home radius.
+- Ranking still respects existing Explore filters like open now, kid-friendly, quiet, outdoors, and category heuristics.
+
+### On My Way
+
+- Uses active route geometry when navigation is active.
+- Scores places by bounded distance off route plus estimated detour minutes.
+- Filters out results that exceed configured detour distance or detour time caps.
+
+## Transport profiles and provider honesty
+
+The settings layer now stores transport profiles and route-style preferences, but the current provider path is intentionally honest about what is real versus scaffolded:
+
+- **Real now:** profile-aware preference storage, route-preview messaging, provider profile mapping hints, and UI warnings.
+- **Scaffolded now:** RV/truck/commercial/trailer restriction enforcement, scenic optimization, low-stress optimization, and guaranteed no-toll routing across all providers.
+- **Never overclaimed:** the app warns that current providers in this repo do not guarantee enforcement of safety-critical size/weight/commercial restrictions.
+
+## Simon Challenge Mode guardrails
+
+- Simon Challenge Mode is saved as a bounded preference layer.
+- It is intended to encourage a little more turn variety over time, not to create absurd loops.
+- This build surfaces the preference honestly even though providers are not yet fully reshaping routes around it.
+
+## Binary file confirmation
+
+No binary files were added by this personalized Explore/routing work.

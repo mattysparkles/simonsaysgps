@@ -7,13 +7,17 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.DistanceUnit
 import com.simonsaysgps.domain.model.GameMode
 import com.simonsaysgps.domain.model.PromptFrequency
 import com.simonsaysgps.domain.model.PromptPersonality
+import com.simonsaysgps.domain.model.RouteStyle
+import com.simonsaysgps.domain.model.RoutingPreferences
 import com.simonsaysgps.domain.model.RoutingProvider
 import com.simonsaysgps.domain.model.SettingsModel
-import com.simonsaysgps.domain.model.Coordinate
+import com.simonsaysgps.domain.model.TransportProfile
+import com.simonsaysgps.domain.model.VehicleProfile
 import com.simonsaysgps.domain.model.explore.AccessiblePlacesPreference
 import com.simonsaysgps.domain.model.explore.ExploreSettings
 import com.simonsaysgps.domain.model.explore.ExploreSuggestionCount
@@ -46,6 +50,17 @@ class DataStoreSettingsRepository @Inject constructor(
             prefs[ROUTING_PROVIDER] = updated.routingProvider.name
             prefs[DEBUG_MODE] = updated.debugMode
             prefs[DEMO_MODE] = updated.demoMode
+            prefs[TRANSPORT_PROFILE] = updated.routingPreferences.transportProfile.name
+            prefs[PRIMARY_ROUTE_STYLE] = updated.routingPreferences.primaryRouteStyle.name
+            prefs[AVOID_TOLLS] = updated.routingPreferences.avoidTolls
+            prefs[PREFER_SCENIC] = updated.routingPreferences.preferScenic
+            prefs[PREFER_FASTEST] = updated.routingPreferences.preferFastest
+            prefs[PREFER_LOW_STRESS] = updated.routingPreferences.preferLowStress
+            prefs[SIMON_CHALLENGE_MODE] = updated.routingPreferences.simonChallengeMode
+            prefs[CHALLENGE_INTENSITY] = updated.routingPreferences.challengeIntensity
+            writeNullableDouble(prefs, VEHICLE_HEIGHT_METERS, updated.routingPreferences.vehicleProfile.heightMeters)
+            writeNullableDouble(prefs, VEHICLE_LENGTH_METERS, updated.routingPreferences.vehicleProfile.lengthMeters)
+            writeNullableDouble(prefs, VEHICLE_WEIGHT_TONS, updated.routingPreferences.vehicleProfile.weightTons)
             prefs[EXPLORE_DEFAULT_RADIUS_MILES] = updated.exploreSettings.defaultRadiusMiles
             prefs[EXPLORE_REQUIRE_OPEN_NOW] = updated.exploreSettings.requireOpenNowByDefault
             prefs[EXPLORE_SUGGESTION_COUNT] = updated.exploreSettings.suggestionCount.name
@@ -63,6 +78,9 @@ class DataStoreSettingsRepository @Inject constructor(
                 prefs.remove(EXPLORE_HOME_LATITUDE)
                 prefs.remove(EXPLORE_HOME_LONGITUDE)
             }
+            prefs[EXPLORE_HOME_RADIUS_MILES] = updated.exploreSettings.closeToHomeRadiusMiles
+            prefs[EXPLORE_VISIT_HISTORY_ENABLED] = updated.exploreSettings.visitHistoryEnabled
+            prefs[EXPLORE_VISIT_HISTORY_RETENTION_DAYS] = updated.exploreSettings.visitHistoryRetentionDays
             prefs[EXPLORE_SURPRISE_WEIGHT] = updated.exploreSettings.surpriseMeWeight
             prefs[EXPLORE_KID_FRIENDLY_ONLY] = updated.exploreSettings.kidFriendlyOnly
             prefs[EXPLORE_QUIET_STRICTNESS] = updated.exploreSettings.quietPreferenceStrictness.name
@@ -82,6 +100,21 @@ class DataStoreSettingsRepository @Inject constructor(
         routingProvider = RoutingProvider.fromNameOrDefault(this[ROUTING_PROVIDER]),
         debugMode = this[DEBUG_MODE] ?: false,
         demoMode = this[DEMO_MODE] ?: true,
+        routingPreferences = RoutingPreferences(
+            transportProfile = this[TRANSPORT_PROFILE]?.let(TransportProfile::valueOf) ?: TransportProfile.CAR,
+            primaryRouteStyle = this[PRIMARY_ROUTE_STYLE]?.let(RouteStyle::valueOf) ?: RouteStyle.FASTEST,
+            avoidTolls = this[AVOID_TOLLS] ?: false,
+            preferScenic = this[PREFER_SCENIC] ?: false,
+            preferFastest = this[PREFER_FASTEST] ?: true,
+            preferLowStress = this[PREFER_LOW_STRESS] ?: false,
+            simonChallengeMode = this[SIMON_CHALLENGE_MODE] ?: false,
+            challengeIntensity = this[CHALLENGE_INTENSITY] ?: 2,
+            vehicleProfile = VehicleProfile(
+                heightMeters = this[VEHICLE_HEIGHT_METERS]?.toDoubleOrNull(),
+                lengthMeters = this[VEHICLE_LENGTH_METERS]?.toDoubleOrNull(),
+                weightTons = this[VEHICLE_WEIGHT_TONS]?.toDoubleOrNull()
+            )
+        ),
         exploreSettings = ExploreSettings(
             defaultRadiusMiles = this[EXPLORE_DEFAULT_RADIUS_MILES] ?: 10,
             requireOpenNowByDefault = this[EXPLORE_REQUIRE_OPEN_NOW] ?: true,
@@ -94,6 +127,9 @@ class DataStoreSettingsRepository @Inject constructor(
             includeThirdPartyReviewSummariesWhenAvailable = this[EXPLORE_INCLUDE_THIRD_PARTY_REVIEWS] ?: true,
             homeLabel = this[EXPLORE_HOME_LABEL] ?: "",
             homeCoordinate = parseCoordinate(this[EXPLORE_HOME_LATITUDE], this[EXPLORE_HOME_LONGITUDE]),
+            closeToHomeRadiusMiles = this[EXPLORE_HOME_RADIUS_MILES] ?: 8,
+            visitHistoryEnabled = this[EXPLORE_VISIT_HISTORY_ENABLED] ?: true,
+            visitHistoryRetentionDays = this[EXPLORE_VISIT_HISTORY_RETENTION_DAYS] ?: 180,
             surpriseMeWeight = this[EXPLORE_SURPRISE_WEIGHT] ?: 0.2f,
             kidFriendlyOnly = this[EXPLORE_KID_FRIENDLY_ONLY] ?: false,
             quietPreferenceStrictness = this[EXPLORE_QUIET_STRICTNESS]?.let(QuietPreferenceStrictness::valueOf) ?: QuietPreferenceStrictness.BALANCED,
@@ -110,6 +146,14 @@ class DataStoreSettingsRepository @Inject constructor(
         return if (lat != null && lon != null) Coordinate(lat, lon) else null
     }
 
+    private fun writeNullableDouble(
+        prefs: androidx.datastore.preferences.core.MutablePreferences,
+        key: androidx.datastore.preferences.core.Preferences.Key<String>,
+        value: Double?
+    ) {
+        if (value != null && value > 0.0) prefs[key] = value.toString() else prefs.remove(key)
+    }
+
     private companion object {
         val VOICE_ENABLED = booleanPreferencesKey("voice_enabled")
         val GAME_MODE = stringPreferencesKey("game_mode")
@@ -119,6 +163,17 @@ class DataStoreSettingsRepository @Inject constructor(
         val ROUTING_PROVIDER = stringPreferencesKey("routing_provider")
         val DEBUG_MODE = booleanPreferencesKey("debug_mode")
         val DEMO_MODE = booleanPreferencesKey("demo_mode")
+        val TRANSPORT_PROFILE = stringPreferencesKey("transport_profile")
+        val PRIMARY_ROUTE_STYLE = stringPreferencesKey("primary_route_style")
+        val AVOID_TOLLS = booleanPreferencesKey("avoid_tolls")
+        val PREFER_SCENIC = booleanPreferencesKey("prefer_scenic")
+        val PREFER_FASTEST = booleanPreferencesKey("prefer_fastest")
+        val PREFER_LOW_STRESS = booleanPreferencesKey("prefer_low_stress")
+        val SIMON_CHALLENGE_MODE = booleanPreferencesKey("simon_challenge_mode")
+        val CHALLENGE_INTENSITY = intPreferencesKey("challenge_intensity")
+        val VEHICLE_HEIGHT_METERS = stringPreferencesKey("vehicle_height_meters")
+        val VEHICLE_LENGTH_METERS = stringPreferencesKey("vehicle_length_meters")
+        val VEHICLE_WEIGHT_TONS = stringPreferencesKey("vehicle_weight_tons")
         val EXPLORE_DEFAULT_RADIUS_MILES = intPreferencesKey("explore_default_radius_miles")
         val EXPLORE_REQUIRE_OPEN_NOW = booleanPreferencesKey("explore_require_open_now")
         val EXPLORE_SUGGESTION_COUNT = stringPreferencesKey("explore_suggestion_count")
@@ -131,6 +186,9 @@ class DataStoreSettingsRepository @Inject constructor(
         val EXPLORE_HOME_LABEL = stringPreferencesKey("explore_home_label")
         val EXPLORE_HOME_LATITUDE = stringPreferencesKey("explore_home_latitude")
         val EXPLORE_HOME_LONGITUDE = stringPreferencesKey("explore_home_longitude")
+        val EXPLORE_HOME_RADIUS_MILES = intPreferencesKey("explore_home_radius_miles")
+        val EXPLORE_VISIT_HISTORY_ENABLED = booleanPreferencesKey("explore_visit_history_enabled")
+        val EXPLORE_VISIT_HISTORY_RETENTION_DAYS = intPreferencesKey("explore_visit_history_retention_days")
         val EXPLORE_SURPRISE_WEIGHT = floatPreferencesKey("explore_surprise_weight")
         val EXPLORE_KID_FRIENDLY_ONLY = booleanPreferencesKey("explore_kid_friendly_only")
         val EXPLORE_QUIET_STRICTNESS = stringPreferencesKey("explore_quiet_strictness")

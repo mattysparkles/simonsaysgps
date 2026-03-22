@@ -3,6 +3,12 @@ package com.simonsaysgps.domain.explore
 import com.google.common.truth.Truth.assertThat
 import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.Route
+import com.simonsaysgps.domain.model.RouteStyle
+import com.simonsaysgps.domain.model.RoutingPreferences
+import com.simonsaysgps.domain.model.RoutingProvider
+import com.simonsaysgps.domain.model.SettingsModel
+import com.simonsaysgps.domain.model.TransportProfile
+import com.simonsaysgps.domain.model.VehicleProfile
 import com.simonsaysgps.domain.model.explore.ExploreCandidate
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.ExploreConfidenceSignal
@@ -15,6 +21,8 @@ import com.simonsaysgps.domain.model.explore.ExploreReviewSourceSummary
 import com.simonsaysgps.domain.model.explore.ExploreReviewSummary
 import com.simonsaysgps.domain.model.explore.ExploreSettings
 import com.simonsaysgps.domain.model.explore.ExploreSourceAttribution
+import com.simonsaysgps.domain.service.RoutingSupportAdvisor
+import com.simonsaysgps.domain.service.SupportLevel
 import com.simonsaysgps.domain.service.explore.ExploreRankingEngine
 import org.junit.Test
 
@@ -48,7 +56,7 @@ class ExploreRankingEngineTest {
     }
 
     @Test
-    fun `on my way boosts candidates with lower route detour distance`() {
+    fun `on my way boosts candidates with lower route detour distance and minutes`() {
         val route = Route(
             geometry = listOf(origin, Coordinate(40.7510, -73.9820)),
             maneuvers = emptyList(),
@@ -59,10 +67,62 @@ class ExploreRankingEngineTest {
         val close = baseCandidate("coffee", "Coffee", Coordinate(40.7493, -73.9846), setOf(ExploreFacet.FOOD, ExploreFacet.DRINK), openNow = true)
         val far = baseCandidate("museum", "Museum", Coordinate(40.7600, -73.9700), setOf(ExploreFacet.IMPORTANT, ExploreFacet.LEARNING), openNow = true)
 
-        val ranked = engine.rank(ExploreQuery(category = ExploreCategory.ON_MY_WAY, userLocation = origin, activeRoute = route, settings = ExploreSettings()), listOf(far, close))
+        val ranked = engine.rank(
+            ExploreQuery(
+                category = ExploreCategory.ON_MY_WAY,
+                userLocation = origin,
+                activeRoute = route,
+                settings = ExploreSettings(maxDetourDistanceMiles = 2.0, maxDetourMinutes = 15)
+            ),
+            listOf(far, close)
+        )
 
         assertThat(ranked.first().candidate.id).isEqualTo("coffee")
-        assertThat(ranked.first().offRouteDistanceMeters).isLessThan(ranked.last().offRouteDistanceMeters)
+        assertThat(ranked.first().estimatedDetourMinutes).isLessThan(ranked.last().estimatedDetourMinutes)
+    }
+
+    @Test
+    fun `close to home prefers places inside saved home radius`() {
+        val nearHome = baseCandidate("bakery", "Bakery", Coordinate(40.7488, -73.9860), setOf(ExploreFacet.FOOD), openNow = true)
+        val farther = baseCandidate("mall", "Mall", Coordinate(40.7900, -73.9600), setOf(ExploreFacet.SHOPPING), openNow = true)
+
+        val ranked = engine.rank(
+            ExploreQuery(
+                category = ExploreCategory.CLOSE_TO_HOME,
+                userLocation = origin,
+                settings = ExploreSettings(homeCoordinate = origin, closeToHomeRadiusMiles = 3)
+            ),
+            listOf(farther, nearHome)
+        )
+
+        assertThat(ranked.first().candidate.id).isEqualTo("bakery")
+        assertThat(ranked.first().homeDistanceMeters).isLessThan(ranked.last().homeDistanceMeters)
+    }
+
+    @Test
+    fun `never been filters confidently visited places but keeps uncertain matches`() {
+        val visited = baseCandidate(id = "old", name = "Classic Diner", coordinate = Coordinate(40.7488, -73.9855), facets = setOf(ExploreFacet.FOOD), visitedBefore = true)
+        val uncertain = baseCandidate(
+            id = "maybe",
+            name = "Maybe Cafe",
+            coordinate = Coordinate(40.7486, -73.9852),
+            facets = setOf(ExploreFacet.FOOD),
+            confidenceSignals = listOf(
+                ExploreConfidenceSignal(
+                    label = "possible-visit-match",
+                    confidence = 0.75f,
+                    inferred = true,
+                    detail = "Possible match to a prior visit.",
+                    source = ExploreSourceAttribution("visit-history", "Visit history", verified = false)
+                )
+            )
+        )
+        val fresh = baseCandidate(id = "new", name = "Fresh Spot", coordinate = Coordinate(40.7487, -73.9854), facets = setOf(ExploreFacet.FOOD))
+
+        val ranked = engine.rank(ExploreQuery(ExploreCategory.NEVER_BEEN, origin), listOf(visited, uncertain, fresh))
+
+        assertThat(ranked.map { it.candidate.id }).doesNotContain("old")
+        assertThat(ranked.map { it.candidate.id }).containsExactly("new", "maybe").inOrder()
     }
 
     @Test
@@ -144,6 +204,22 @@ class ExploreRankingEngineTest {
 
         assertThat(ranked.first().candidate.id).isEqualTo("new")
         assertThat(ranked.first().debugBreakdown["novelty"]).isGreaterThan(ranked.last().debugBreakdown["novelty"])
+    }
+
+    @Test
+    fun `routing support advisor honestly flags unsupported heavy vehicle restrictions`() {
+        val advisory = RoutingSupportAdvisor.advisory(
+            provider = RoutingProvider.OSRM,
+            preferences = RoutingPreferences(
+                transportProfile = TransportProfile.RV,
+                primaryRouteStyle = RouteStyle.NO_TOLLS,
+                avoidTolls = true,
+                vehicleProfile = VehicleProfile(heightMeters = 3.8, lengthMeters = 9.0, weightTons = 8.0)
+            )
+        )
+
+        assertThat(advisory.safetyCriticalSupport).isEqualTo(SupportLevel.PARTIAL)
+        assertThat(advisory.limitations.joinToString()).contains("does not guarantee enforcement")
     }
 
     private fun reviewSummary(internal: Double?, external: Double, count: Int): ExploreReviewSummary {

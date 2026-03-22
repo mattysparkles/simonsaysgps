@@ -11,5 +11,6 @@ data class SettingsModel(
     val routingProvider: RoutingProvider = RoutingProvider.OSRM,
     val debugMode: Boolean = false,
     val demoMode: Boolean = true,
+    val routingPreferences: RoutingPreferences = RoutingPreferences(),
     val exploreSettings: ExploreSettings = ExploreSettings()
 )

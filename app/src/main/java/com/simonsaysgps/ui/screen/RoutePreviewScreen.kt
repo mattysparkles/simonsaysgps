@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.util.DistanceFormatter
+import com.simonsaysgps.domain.service.RoutingSupportAdvisor
 import com.simonsaysgps.ui.components.InfoCard
 import com.simonsaysgps.ui.components.MapLibreMapView
 import com.simonsaysgps.ui.test.UiTestTags
@@ -76,8 +77,18 @@ fun RoutePreviewScreenContent(
             InfoCard("Distance", DistanceFormatter.format(route.totalDistanceMeters, state.settings.distanceUnit))
             InfoCard("ETA", DateTimeFormatter.ofPattern("h:mm a").format(Instant.ofEpochSecond(route.etaEpochSeconds).atZone(ZoneId.systemDefault())))
             InfoCard("Maneuvers", "${route.maneuvers.size} turns")
+            InfoCard("Transport profile", state.settings.routingPreferences.transportProfile.displayName)
+            InfoCard("Route style", RoutingSupportAdvisor.plan(state.settings).requestedStyles.joinToString())
             state.routeInfo?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            val advisory = RoutingSupportAdvisor.plan(state.settings).advisory
+            if (advisory.limitations.isNotEmpty()) {
+                Text(
+                    text = advisory.limitations.joinToString(separator = "\n") { "• $it" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
             state.routeError?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)

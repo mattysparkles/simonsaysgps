@@ -14,6 +14,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Reroute with playful prompts like: _"Oh, Simon didn't say. Rerouting."_
 - Offer a debug overlay, demo mode, and a routing-provider selector for emulator testing and provider experiments.
 - Add an Explore tab foundation with intent chips, ranked results, explainable suggestion reasons, configurable safety/detour rules, and demo providers that exercise the existing location/map stack.
+- Personalize Explore with first-party visit history, home anchors, Close to Home and On My Way ranking, plus transport/route-style preferences that are surfaced honestly when provider support is partial.
 
 ## Stack choices
 
@@ -23,7 +24,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Map rendering:** MapLibre Android SDK with environment-driven style configuration, a safe development fallback, and production/self-hosted deployment scaffolding.
 - **Routing:** Provider-selectable routing through a swappable `RoutingRepository` abstraction with provider adapters.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
-- **Persistence:** DataStore for settings, Explore preferences, lightweight search/route caches, and a persisted active-navigation snapshot for safe session restoration.
+- **Persistence:** DataStore for settings, Explore preferences, lightweight search/route caches, first-party visit history, and a persisted active-navigation snapshot for safe session restoration.
 - **Explore discovery:** A dedicated Explore domain stack with provider abstractions for place data, event data, visit history, reviews, promotions, plus an isolated ranking engine.
 - **Background resilience:** WorkManager coordinates deferred session recovery checks, while the foreground service remains responsible for real-time navigation.
 - **Prompt personalities:** Data-driven prompt profiles, making it easy to add new Simon tones later.
@@ -176,6 +177,28 @@ This PR intentionally keeps the architecture provider-ready without pretending e
 
 See [`docs/explore_provider_integration.md`](docs/explore_provider_integration.md) for the provider matrix, setup expectations, attribution rules, and limitations.
 
+### Personalized Explore and routing context
+
+This PR adds a local-first personalization layer on top of the Explore foundation:
+
+- **First-party visit history:** Simon Says GPS stores app-confirmed saves and navigation arrivals locally when visit history is enabled. There is no assumed Google Maps Timeline import or other external history dependency in this build.
+- **Privacy controls:** Explore Settings now includes enable/disable, retention windows, per-place removal, and clear-all history actions.
+- **I've Never Been:** Results confidently matched in first-party history are filtered out. Lower-confidence matches are treated cautiously instead of being overclaimed.
+- **Close to Home:** Explore can score suggestions against a saved home anchor and configurable home radius.
+- **On My Way:** When navigation is active, Explore now uses active route geometry, distance-off-route, and estimated detour minutes to keep corridor logic explainable and bounded.
+- **Transport profiles:** Settings now persist profiles for walking, bicycle, e-bike, e-skateboard, motorcycle, car, RV, truck/commercial, and trailer/towing.
+- **Route styles and gameplay:** Settings now persist Fastest, Scenic, No tolls, Low stress, and Simon Challenge Mode preferences plus challenge intensity.
+
+### Honest routing limitations
+
+Profile-aware routing is scaffolded now, but the current provider path still has important limits:
+
+- truck/RV/trailer/height/length/weight restrictions are **not guaranteed** to be enforced by the current provider stack in this repo
+- toll avoidance, scenic routing, and low-stress routing are saved and surfaced as preferences, but are not universally guaranteed by the current providers
+- Simon Challenge Mode is intentionally bounded and does **not** generate absurd loops or pretend to be a full alternate route generator yet
+
+These limitations are shown in Settings, route preview messaging, and docs so the app does not overclaim safety-critical support.
+
 ### Explore settings now implemented
 
 Persisted settings now include:
@@ -188,7 +211,8 @@ Persisted settings now include:
 - use event data when available
 - use internal reviews first
 - include third-party review summaries when available
-- home reference (saved from current location in this phase)
+- home reference plus Close to Home radius (saved from current location in this phase)
+- visit history enable/disable and retention window
 - surprise-me weighting
 - kid-friendly filter
 - quiet-preference strictness
@@ -215,9 +239,10 @@ Still future work:
 - production review write-back and richer authenticated internal review storage
 - richer home-address search/selection flow
 - deeper route-detour estimation tied to routing-provider ETAs
+- true provider-enforced heavy-vehicle restrictions and richer style-specific route generation
 - analytics/telemetry and moderation around review content
 
-**No binary files were added in this Explore provider integration PR.**
+**No binary files were added in this PR.**
 
 ## Simon Says rules
 

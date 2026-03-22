@@ -22,11 +22,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.simonsaysgps.domain.model.VisitHistoryEntry
 import com.simonsaysgps.domain.model.explore.AccessiblePlacesPreference
 import com.simonsaysgps.domain.model.explore.ExploreSettings
 import com.simonsaysgps.domain.model.explore.ExploreSuggestionCount
 import com.simonsaysgps.domain.model.explore.QuietPreferenceStrictness
 import com.simonsaysgps.ui.viewmodel.AppViewModel
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ExploreSettingsScreen(
@@ -36,9 +40,13 @@ fun ExploreSettingsScreen(
     val state by viewModel.uiState.collectAsState()
     ExploreSettingsScreenContent(
         settings = state.settings.exploreSettings,
+        visitHistory = state.visitHistory,
         onBack = onBack,
         onSettingsChange = { transform -> viewModel.updateExploreSettings(transform) },
-        onUseCurrentLocationAsHome = { viewModel.saveCurrentLocationAsExploreHome() }
+        onUseCurrentLocationAsHome = { viewModel.saveCurrentLocationAsExploreHome() },
+        onClearHome = viewModel::clearExploreHome,
+        onClearVisitHistory = viewModel::clearVisitHistory,
+        onRemoveVisitHistoryPlace = viewModel::removeVisitHistoryPlace
     )
 }
 
@@ -46,9 +54,13 @@ fun ExploreSettingsScreen(
 @Composable
 fun ExploreSettingsScreenContent(
     settings: ExploreSettings,
+    visitHistory: List<VisitHistoryEntry>,
     onBack: () -> Unit,
     onSettingsChange: ((ExploreSettings) -> ExploreSettings) -> Unit,
-    onUseCurrentLocationAsHome: () -> Unit
+    onUseCurrentLocationAsHome: () -> Unit,
+    onClearHome: () -> Unit,
+    onClearVisitHistory: () -> Unit,
+    onRemoveVisitHistoryPlace: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -93,7 +105,7 @@ fun ExploreSettingsScreenContent(
                 title = "Max detour distance",
                 value = settings.maxDetourDistanceMiles.toFloat(),
                 range = 1f..20f,
-                helper = "Hard cap for route detours.",
+                helper = "Hard cap for route detours so On My Way stays bounded.",
                 label = "${"%.1f".format(settings.maxDetourDistanceMiles)} miles",
                 onValueChange = { value -> onSettingsChange { it.copy(maxDetourDistanceMiles = value.toDouble()) } }
             )
@@ -101,7 +113,7 @@ fun ExploreSettingsScreenContent(
                 title = "Max detour time",
                 value = settings.maxDetourMinutes.toFloat(),
                 range = 5f..45f,
-                helper = "Soft limit for route detour time.",
+                helper = "Soft limit for route detour time. Results outside this cap are filtered out for On My Way.",
                 label = "${settings.maxDetourMinutes} minutes",
                 onValueChange = { value -> onSettingsChange { it.copy(maxDetourMinutes = value.toInt()) } }
             )
@@ -116,9 +128,51 @@ fun ExploreSettingsScreenContent(
             }
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Home reference", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                    Text(if (settings.homeCoordinate != null) "${settings.homeLabel.ifBlank { "Saved Home" }} · ${settings.homeCoordinate.latitude}, ${settings.homeCoordinate.longitude}" else "No home reference saved yet.")
-                    TextButton(onClick = onUseCurrentLocationAsHome) { Text("Use current location as home") }
+                    Text("Home anchor", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                    Text(if (settings.homeCoordinate != null) "${settings.homeLabel.ifBlank { "Saved Home" }} · ${settings.homeCoordinate.latitude}, ${settings.homeCoordinate.longitude}" else "No home anchor saved yet.")
+                    Text("Used by Close to Home so Explore can score nearby places against your saved home area.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onUseCurrentLocationAsHome) { Text("Use current location") }
+                        TextButton(onClick = onClearHome) { Text("Clear home") }
+                    }
+                }
+            }
+            SliderCard(
+                title = "Close to Home radius",
+                value = settings.closeToHomeRadiusMiles.toFloat(),
+                range = 1f..25f,
+                helper = "Defines the home-area radius used by Close to Home ranking.",
+                label = "${settings.closeToHomeRadiusMiles} miles",
+                onValueChange = { value -> onSettingsChange { it.copy(closeToHomeRadiusMiles = value.toInt()) } }
+            )
+            ToggleCard("Enable first-party visit history", settings.visitHistoryEnabled, "Stores app-observed or app-confirmed visits locally so Explore can power I've Never Been and novelty scoring.") {
+                onSettingsChange { current -> current.copy(visitHistoryEnabled = it) }
+            }
+            ChoiceCard(
+                title = "Visit history retention",
+                options = listOf(30 to "30 days", 90 to "90 days", 180 to "180 days", 365 to "1 year"),
+                selected = settings.visitHistoryRetentionDays,
+                onSelected = { selected -> onSettingsChange { it.copy(visitHistoryRetentionDays = selected) } }
+            )
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Saved visit history", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                    Text("Local-first history only. You can remove any place or clear everything at any time.")
+                    if (visitHistory.isEmpty()) {
+                        Text("No visits saved yet.")
+                    } else {
+                        visitHistory.take(6).forEach { entry ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(entry.name)
+                                    Text(entry.address, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                                    Text("${entry.source.name.lowercase().replace('_', ' ')} · ${DateTimeFormatter.ofPattern("MMM d, yyyy").format(Instant.ofEpochMilli(entry.visitedAtEpochMillis).atZone(ZoneId.systemDefault()))}", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = { onRemoveVisitHistoryPlace(entry.placeId) }) { Text("Remove") }
+                            }
+                        }
+                        TextButton(onClick = onClearVisitHistory) { Text("Clear all history") }
+                    }
                 }
             }
             SliderCard(
