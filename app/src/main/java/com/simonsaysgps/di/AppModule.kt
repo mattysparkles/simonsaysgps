@@ -3,10 +3,12 @@ package com.simonsaysgps.di
 import com.simonsaysgps.BuildConfig
 import com.simonsaysgps.data.remote.NominatimApi
 import com.simonsaysgps.data.remote.OsrmApi
+import com.simonsaysgps.data.repository.DataStoreRecentDestinationRepository
 import com.simonsaysgps.data.repository.DataStoreSettingsRepository
 import com.simonsaysgps.data.repository.NominatimGeocodingRepository
 import com.simonsaysgps.data.repository.OsrmRoutingRepository
 import com.simonsaysgps.domain.repository.GeocodingRepository
+import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -84,6 +86,9 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindSettingsRepository(impl: DataStoreSettingsRepository): SettingsRepository
+
+    @Binds
+    abstract fun bindRecentDestinationRepository(impl: DataStoreRecentDestinationRepository): RecentDestinationRepository
 
     @Binds
     abstract fun bindVoicePromptManager(impl: AndroidVoicePromptManager): VoicePromptManager

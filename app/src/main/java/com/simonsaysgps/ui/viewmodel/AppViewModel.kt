@@ -12,6 +12,7 @@ import com.simonsaysgps.domain.model.PlaceResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.repository.GeocodingRepository
+import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -20,6 +21,7 @@ import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val geocodingRepository: GeocodingRepository,
+    private val recentDestinationRepository: RecentDestinationRepository,
     private val routingRepository: RoutingRepository,
     private val settingsRepository: SettingsRepository,
     private val fusedLocationRepository: FusedLocationRepository,
@@ -50,12 +53,25 @@ class AppViewModel @Inject constructor(
 
     private var locationJob: Job? = null
     private var routeDestination: Coordinate? = null
+    private var searchJob: Job? = null
 
     init {
         viewModelScope.launch {
             settings.collect { updated ->
                 _uiState.value = _uiState.value.copy(settings = updated, isLoading = false)
                 if (_uiState.value.hasLocationPermission) startLocationUpdates()
+            }
+        }
+        viewModelScope.launch {
+            recentDestinationRepository.recentDestinations.collect { recentDestinations ->
+                val currentState = _uiState.value
+                _uiState.value = currentState.copy(
+                    recentDestinations = recentDestinations,
+                    searchStatus = currentState.searchStatus.normalizeForQuery(
+                        query = currentState.searchQuery,
+                        hasRecentDestinations = recentDestinations.isNotEmpty()
+                    )
+                )
             }
         }
     }
@@ -66,21 +82,62 @@ class AppViewModel @Inject constructor(
     }
 
     fun updateSearchQuery(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                searchQuery = query,
+                searchResults = emptyList(),
+                searchError = null,
+                searchInFlight = false,
+                searchStatus = SearchStatus.RECENTS
+            )
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
+            searchError = null,
+            searchInFlight = false,
+            searchStatus = SearchStatus.DEBOUNCING
+        )
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            performSearch(query)
+        }
     }
 
     fun search() {
         val query = _uiState.value.searchQuery
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null)
-            geocodingRepository.search(query)
-                .onSuccess { results -> _uiState.value = _uiState.value.copy(searchResults = results, searchInFlight = false) }
-                .onFailure { error -> _uiState.value = _uiState.value.copy(searchError = error.message, searchInFlight = false) }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                searchResults = emptyList(),
+                searchError = null,
+                searchInFlight = false,
+                searchStatus = SearchStatus.RECENTS
+            )
+            return
         }
+        searchJob = viewModelScope.launch { performSearch(query) }
     }
 
     fun selectPlace(place: PlaceResult) {
         _uiState.value = _uiState.value.copy(selectedPlace = place)
+        viewModelScope.launch {
+            recentDestinationRepository.save(place)
+        }
+    }
+
+    fun removeRecentDestination(placeId: String) {
+        viewModelScope.launch {
+            recentDestinationRepository.remove(placeId)
+        }
+    }
+
+    fun clearRecentDestinations() {
+        viewModelScope.launch {
+            recentDestinationRepository.clear()
+        }
     }
 
     fun requestRoute() {
@@ -121,6 +178,29 @@ class AppViewModel @Inject constructor(
 
     fun updateSettings(transform: (SettingsModel) -> SettingsModel) {
         viewModelScope.launch { settingsRepository.update(transform) }
+    }
+
+    private suspend fun performSearch(query: String) {
+        if (query.isBlank() || query != _uiState.value.searchQuery) return
+        _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null, searchStatus = SearchStatus.LOADING)
+        geocodingRepository.search(query)
+            .onSuccess { results ->
+                if (query != _uiState.value.searchQuery) return
+                _uiState.value = _uiState.value.copy(
+                    searchResults = results,
+                    searchInFlight = false,
+                    searchStatus = if (results.isEmpty()) SearchStatus.EMPTY else SearchStatus.SUCCESS
+                )
+            }
+            .onFailure { error ->
+                if (query != _uiState.value.searchQuery) return
+                _uiState.value = _uiState.value.copy(
+                    searchResults = emptyList(),
+                    searchError = error.message,
+                    searchInFlight = false,
+                    searchStatus = SearchStatus.ERROR
+                )
+            }
     }
 
     private fun startLocationUpdates() {
@@ -209,6 +289,7 @@ class AppViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "AppViewModel"
+        internal const val SEARCH_DEBOUNCE_MS = 400L
     }
 }
 
@@ -217,6 +298,8 @@ data class AppUiState(
     val hasLocationPermission: Boolean = false,
     val searchQuery: String = "",
     val searchResults: List<PlaceResult> = emptyList(),
+    val recentDestinations: List<PlaceResult> = emptyList(),
+    val searchStatus: SearchStatus = SearchStatus.RECENTS,
     val selectedPlace: PlaceResult? = null,
     val routePreview: Route? = null,
     val currentLocation: com.simonsaysgps.domain.model.LocationSample? = null,
@@ -228,3 +311,22 @@ data class AppUiState(
     val lastPrompt: String? = null,
     val settings: SettingsModel = SettingsModel()
 )
+
+enum class SearchStatus {
+    RECENTS,
+    DEBOUNCING,
+    LOADING,
+    SUCCESS,
+    EMPTY,
+    ERROR;
+
+    fun normalizeForQuery(query: String, hasRecentDestinations: Boolean): SearchStatus {
+        return if (query.isBlank()) {
+            RECENTS
+        } else if (this == RECENTS && !hasRecentDestinations) {
+            EMPTY
+        } else {
+            this
+        }
+    }
+}
