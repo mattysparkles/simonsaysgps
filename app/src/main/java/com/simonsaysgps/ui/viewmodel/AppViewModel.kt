@@ -211,7 +211,13 @@ class AppViewModel @Inject constructor(
             repo.locationUpdates().collect { location ->
                 val currentState = _uiState.value.navigationState
                 val updatedNavigation = if (currentState.navigationActive) {
-                    navigationUseCase.updateState(currentState, previousLocation, location, settings.value.distanceUnit)
+                    navigationUseCase.updateState(
+                        previousState = currentState,
+                        previousLocation = previousLocation,
+                        currentLocation = location,
+                        distanceUnit = settings.value.distanceUnit,
+                        promptPersonality = settings.value.promptPersonality
+                    )
                 } else {
                     currentState.copy(currentLocation = location)
                 }

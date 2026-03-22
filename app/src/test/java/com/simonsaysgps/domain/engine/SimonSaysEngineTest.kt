@@ -7,6 +7,7 @@ import com.simonsaysgps.domain.model.GameMode
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.ManeuverAuthorization
 import com.simonsaysgps.domain.model.NavigationSessionState
+import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SimonTurnResolution
@@ -38,7 +39,8 @@ class SimonSaysEngineTest {
             previousState = start.copy(distanceToNextManeuverMeters = 10.0),
             previousLocation = sample(0.0, 0.0, 0f),
             currentLocation = sample(0.0, 0.0001, 90f),
-            distanceUnit = DistanceUnit.IMPERIAL
+            distanceUnit = DistanceUnit.IMPERIAL,
+            promptPersonality = PromptPersonality.CLASSIC_SIMON
         )
         assertThat(updated.latestResolution).isInstanceOf(SimonTurnResolution.Unauthorized::class.java)
     }
@@ -53,7 +55,13 @@ class SimonSaysEngineTest {
             upcomingManeuver = route.maneuvers.first(),
             navigationActive = true
         )
-        val updated = engine.update(start, sample(0.0, 0.0, 0f), sample(0.002, 0.002, 0f), DistanceUnit.IMPERIAL)
+        val updated = engine.update(
+            previousState = start,
+            previousLocation = sample(0.0, 0.0, 0f),
+            currentLocation = sample(0.002, 0.002, 0f),
+            distanceUnit = DistanceUnit.IMPERIAL,
+            promptPersonality = PromptPersonality.CLASSIC_SIMON
+        )
         assertThat(updated.latestResolution).isInstanceOf(SimonTurnResolution.OffRoute::class.java)
     }
 
@@ -61,8 +69,30 @@ class SimonSaysEngineTest {
     fun `authorized maneuver advances to next step`() {
         val route = route()
         val start = engine.begin(route)
-        val updated = engine.update(start.copy(distanceToNextManeuverMeters = 10.0), sample(0.0, 0.0, 0f), sample(0.0, 0.0001, 90f), DistanceUnit.IMPERIAL)
+        val updated = engine.update(
+            previousState = start.copy(distanceToNextManeuverMeters = 10.0),
+            previousLocation = sample(0.0, 0.0, 0f),
+            currentLocation = sample(0.0, 0.0001, 90f),
+            distanceUnit = DistanceUnit.IMPERIAL,
+            promptPersonality = PromptPersonality.CLASSIC_SIMON
+        )
         assertThat(updated.activeManeuverIndex).isEqualTo(1)
+    }
+
+    @Test
+    fun `selected personality changes spoken prompt text`() {
+        val route = route()
+        val start = engine.begin(route)
+
+        val updated = engine.update(
+            previousState = start.copy(distanceToNextManeuverMeters = 10.0),
+            previousLocation = sample(0.0, 0.0, 0f),
+            currentLocation = sample(0.0, 0.0, 0f),
+            distanceUnit = DistanceUnit.IMPERIAL,
+            promptPersonality = PromptPersonality.POLITE_SIMON
+        )
+
+        assertThat(updated.spokenPrompt).isEqualTo("Simon says please turn right onto pond road.")
     }
 
     private fun route() = Route(

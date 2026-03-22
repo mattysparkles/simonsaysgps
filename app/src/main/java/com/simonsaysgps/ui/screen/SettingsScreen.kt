@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -20,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.DistanceUnit
 import com.simonsaysgps.domain.model.GameMode
+import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.PromptFrequency
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 
@@ -47,6 +46,14 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 options = PromptFrequency.entries.map { it.name to it.name.lowercase().replaceFirstChar(Char::uppercase) },
                 selected = settings.promptFrequency.name,
                 onSelected = { selected -> viewModel.updateSettings { it.copy(promptFrequency = PromptFrequency.valueOf(selected)) } }
+            )
+            ChoiceCard(
+                title = "Prompt personality",
+                options = PromptPersonality.entries.map { it.name to it.displayName },
+                selected = settings.promptPersonality.name,
+                onSelected = { selected ->
+                    viewModel.updateSettings { it.copy(promptPersonality = PromptPersonality.valueOf(selected)) }
+                }
             )
             ChoiceCard(
                 title = "Units",

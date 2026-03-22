@@ -4,6 +4,7 @@ import com.simonsaysgps.domain.engine.SimonSaysEngine
 import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.NavigationSessionState
+import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.RerouteReason
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.repository.RoutingRepository
@@ -23,8 +24,15 @@ class ObserveNavigationSessionUseCase @Inject constructor(
         previousState: NavigationSessionState,
         previousLocation: LocationSample?,
         currentLocation: LocationSample,
-        distanceUnit: com.simonsaysgps.domain.model.DistanceUnit
-    ): NavigationSessionState = simonSaysEngine.update(previousState, previousLocation, currentLocation, distanceUnit)
+        distanceUnit: com.simonsaysgps.domain.model.DistanceUnit,
+        promptPersonality: PromptPersonality
+    ): NavigationSessionState = simonSaysEngine.update(
+        previousState = previousState,
+        previousLocation = previousLocation,
+        currentLocation = currentLocation,
+        distanceUnit = distanceUnit,
+        promptPersonality = promptPersonality
+    )
 
     fun start(route: Route): NavigationSessionState = simonSaysEngine.begin(route)
 }
