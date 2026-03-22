@@ -1,5 +1,6 @@
 package com.simonsaysgps.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.simonsaysgps.data.location.DemoLocationRepository
@@ -13,6 +14,7 @@ import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
+import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +36,8 @@ class AppViewModel @Inject constructor(
     private val demoLocationRepository: DemoLocationRepository,
     private val navigationUseCase: ObserveNavigationSessionUseCase,
     private val simonSaysEngine: SimonSaysEngine,
-    private val voicePromptManager: VoicePromptManager
+    private val voicePromptManager: VoicePromptManager,
+    private val navigationForegroundServiceController: NavigationForegroundServiceController
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -94,12 +97,25 @@ class AppViewModel @Inject constructor(
     }
 
     fun startNavigation() {
+        if (_uiState.value.navigationState.navigationActive) {
+            Log.d(TAG, "Ignoring startNavigation because a navigation session is already active.")
+            return
+        }
+
         val route = _uiState.value.routePreview ?: return
-        _uiState.value = _uiState.value.copy(navigationState = navigationUseCase.start(route))
+        val updatedState = navigationUseCase.start(route)
+        Log.i(TAG, "Navigation started. routeManeuvers=${route.maneuvers.size}")
+        _uiState.value = _uiState.value.copy(navigationState = updatedState)
+        navigationForegroundServiceController.start("turn-by-turn navigation began")
     }
 
-    fun endNavigation() {
+    fun endNavigation(reason: String = "navigation cancelled") {
+        val wasActive = _uiState.value.navigationState.navigationActive
+        Log.i(TAG, "Navigation ended. reason=$reason wasActive=$wasActive")
         voicePromptManager.stop()
+        if (wasActive) {
+            navigationForegroundServiceController.stop(reason)
+        }
         _uiState.value = _uiState.value.copy(navigationState = NavigationSessionState())
     }
 
@@ -125,6 +141,7 @@ class AppViewModel @Inject constructor(
                 } else {
                     currentState.copy(currentLocation = location)
                 }
+                syncForegroundService(currentState, updatedNavigation)
                 if (updatedNavigation.spokenPrompt != null && settings.value.voiceEnabled) {
                     voicePromptManager.speak(updatedNavigation.spokenPrompt)
                 }
@@ -141,18 +158,57 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun syncForegroundService(
+        previousState: NavigationSessionState,
+        updatedState: NavigationSessionState
+    ) {
+        when {
+            !previousState.navigationActive && updatedState.navigationActive -> {
+                Log.i(TAG, "Foreground service transition: inactive -> active")
+                navigationForegroundServiceController.start("navigation session became active")
+            }
+
+            previousState.navigationActive && !updatedState.navigationActive -> {
+                val reason = when {
+                    updatedState.upcomingManeuver == null -> "destination reached"
+                    else -> "navigation session became inactive"
+                }
+                Log.i(TAG, "Foreground service transition: active -> inactive. reason=$reason")
+                voicePromptManager.stop()
+                navigationForegroundServiceController.stop(reason)
+            }
+
+            previousState.navigationActive && updatedState.navigationActive -> {
+                Log.d(TAG, "Foreground service transition: active -> active")
+            }
+
+            else -> {
+                Log.d(TAG, "Foreground service transition: inactive -> inactive")
+            }
+        }
+    }
+
+
     private fun triggerReroute(origin: Coordinate) {
         val destination = routeDestination ?: return
         viewModelScope.launch {
             routingRepository.calculateRoute(origin, destination)
                 .map { simonSaysEngine.assignAuthorizations(it, settings.value.gameMode) }
                 .onSuccess { route ->
+                    val previousState = _uiState.value.navigationState
+                    val updatedState = navigationUseCase.start(route)
+                    Log.i(TAG, "Reroute completed. maneuverCount=${route.maneuvers.size}")
                     _uiState.value = _uiState.value.copy(
                         routePreview = route,
-                        navigationState = navigationUseCase.start(route)
+                        navigationState = updatedState
                     )
+                    syncForegroundService(previousState, updatedState)
                 }
         }
+    }
+
+    companion object {
+        private const val TAG = "AppViewModel"
     }
 }
 

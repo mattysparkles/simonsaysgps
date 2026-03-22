@@ -8,6 +8,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Preview an OSM route on an OpenStreetMap/MapLibre map.
 - Start navigation with spoken prompts powered by Android TextToSpeech.
 - Pick from multiple prompt personalities for spoken and on-screen navigation callouts.
+- Automatically start and stop the foreground navigation service with the active turn-by-turn session.
 - Detect upcoming maneuvers and decide whether a turn was authorized, missed, or unauthorized.
 - Reroute with playful prompts like: _"Oh, Simon didn't say. Rerouting."_
 - Offer a debug overlay and demo mode for emulator testing.
@@ -84,7 +85,7 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - Turn detection heuristics currently use route proximity, bearing deltas, and step proximity; they are intentionally understandable rather than fully map-matched.
 - The initial implementation keeps most functionality in one Android app module for repo simplicity.
 - Map overlay styling is intentionally lightweight for phase 1.
-- Foreground service scaffolding is included, but full always-on background navigation polish is still a TODO.
+- The foreground navigation service now starts automatically when active guidance begins and stops automatically when guidance ends, arrives, or is cancelled.
 
 ## Phase 1 delivered
 
@@ -111,6 +112,7 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 ## TODOs
 
 - Start/stop the foreground service automatically when navigation begins/ends.
+- Add user-selectable prompt personalities.
 - Add search result debouncing and recent destinations.
 - Tighten missed-turn detection to avoid jitter-driven reroutes.
 - Add offline caches and resilient networking.
