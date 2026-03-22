@@ -1,13 +1,14 @@
 package com.simonsaysgps.domain.engine
 
+import com.simonsaysgps.domain.model.ArrivalStatus
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.ManeuverAuthorization
 import com.simonsaysgps.domain.model.NavigationSessionState
 import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.RerouteReason
 import com.simonsaysgps.domain.model.Route
-import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SimonTurnResolution
+import com.simonsaysgps.domain.model.TurnType
 import com.simonsaysgps.domain.service.PromptFactory
 import com.simonsaysgps.domain.util.GeoUtils
 import javax.inject.Inject
@@ -22,8 +23,10 @@ class SimonSaysEngine @Inject constructor(
         val upcoming = route.maneuvers.firstOrNull()
         return NavigationSessionState(
             route = route,
+            currentRoad = upcoming?.roadName,
             upcomingManeuver = upcoming,
             distanceToNextManeuverMeters = upcoming?.distanceFromPreviousMeters,
+            arrivalStatus = if (upcoming?.turnType == TurnType.ARRIVE) ArrivalStatus.APPROACHING_DESTINATION else ArrivalStatus.EN_ROUTE,
             navigationActive = true
         )
     }
@@ -41,8 +44,10 @@ class SimonSaysEngine @Inject constructor(
         if (maneuver == null) {
             return previousState.copy(
                 currentLocation = currentLocation,
+                currentRoad = null,
+                arrivalStatus = ArrivalStatus.ARRIVED,
                 navigationActive = false,
-                spokenPrompt = promptFactory.approvalPrompt(promptPersonality)
+                spokenPrompt = promptFactory.arrivalPrompt(promptPersonality)
             )
         }
 
@@ -50,7 +55,9 @@ class SimonSaysEngine @Inject constructor(
         val turnDetection = turnDetector.detect(previousLocation, currentLocation, maneuver, route.geometry)
         val corridorDistance = GeoUtils.closestDistanceToPolylineMeters(currentLocation.coordinate, route.geometry)
         val offRoute = corridorDistance > 65.0
+        val arrivedAtDestination = maneuver.turnType == TurnType.ARRIVE && distanceToNext <= ARRIVAL_THRESHOLD_METERS
         val resolution = when {
+            arrivedAtDestination -> SimonTurnResolution.Authorized(maneuver)
             offRoute && distanceToNext > 50 -> SimonTurnResolution.OffRoute(maneuver)
             turnDetection.occurred && maneuver.authorization == ManeuverAuthorization.NORMAL_INFO_ONLY -> SimonTurnResolution.Unauthorized(maneuver)
             turnDetection.occurred && maneuver.authorization == ManeuverAuthorization.REQUIRED_SIMON_SAYS -> SimonTurnResolution.Authorized(maneuver)
@@ -60,8 +67,14 @@ class SimonSaysEngine @Inject constructor(
 
         val nextIndex = if (resolution is SimonTurnResolution.Authorized) currentIndex + 1 else currentIndex
         val nextManeuver = route.maneuvers.getOrNull(nextIndex)
+        val arrivalStatus = when {
+            nextManeuver == null && resolution is SimonTurnResolution.Authorized -> ArrivalStatus.ARRIVED
+            nextManeuver?.turnType == TurnType.ARRIVE -> ArrivalStatus.APPROACHING_DESTINATION
+            maneuver.turnType == TurnType.ARRIVE && distanceToNext <= APPROACHING_DESTINATION_THRESHOLD_METERS -> ArrivalStatus.APPROACHING_DESTINATION
+            else -> ArrivalStatus.EN_ROUTE
+        }
         val prompt = when {
-            resolution is SimonTurnResolution.Authorized && nextManeuver == null -> promptFactory.approvalPrompt(promptPersonality)
+            resolution is SimonTurnResolution.Authorized && nextManeuver == null -> promptFactory.arrivalPrompt(promptPersonality)
             resolution is SimonTurnResolution.Unauthorized -> promptFactory.reroutePrompt(RerouteReason.UNAUTHORIZED_TURN, promptPersonality)
             resolution is SimonTurnResolution.Missed -> promptFactory.reroutePrompt(RerouteReason.MISSED_REQUIRED_TURN, promptPersonality)
             resolution is SimonTurnResolution.OffRoute -> promptFactory.reroutePrompt(RerouteReason.OFF_ROUTE, promptPersonality)
@@ -80,12 +93,14 @@ class SimonSaysEngine @Inject constructor(
             snappedLocation = currentLocation.coordinate,
             activeManeuverIndex = nextIndex,
             distanceToNextManeuverMeters = nextManeuver?.let { GeoUtils.distanceMeters(currentLocation.coordinate, it.coordinate) },
+            currentRoad = nextManeuver?.roadName ?: maneuver.roadName,
             upcomingManeuver = nextManeuver,
             spokenPrompt = prompt,
             latestResolution = resolution,
             offRoute = resolution is SimonTurnResolution.OffRoute,
             lastRerouteReason = rerouteReason,
             headingDegrees = currentLocation.bearing?.toDouble(),
+            arrivalStatus = arrivalStatus,
             navigationActive = nextManeuver != null
         )
     }
@@ -106,5 +121,10 @@ class SimonSaysEngine @Inject constructor(
             maneuver.copy(authorization = authorization)
         }
         return route.copy(maneuvers = updated)
+    }
+
+    private companion object {
+        const val APPROACHING_DESTINATION_THRESHOLD_METERS = 75.0
+        const val ARRIVAL_THRESHOLD_METERS = 20.0
     }
 }

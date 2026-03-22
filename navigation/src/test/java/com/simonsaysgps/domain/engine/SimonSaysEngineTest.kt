@@ -1,6 +1,7 @@
 package com.simonsaysgps.domain.engine
 
 import com.google.common.truth.Truth.assertThat
+import com.simonsaysgps.domain.model.ArrivalStatus
 import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.DistanceUnit
 import com.simonsaysgps.domain.model.GameMode
@@ -77,6 +78,45 @@ class SimonSaysEngineTest {
             promptPersonality = PromptPersonality.CLASSIC_SIMON
         )
         assertThat(updated.activeManeuverIndex).isEqualTo(1)
+    }
+
+
+    @Test
+    fun `arrival maneuver transitions from approaching to arrived`() {
+        val route = Route(
+            geometry = listOf(Coordinate(0.0, 0.0), Coordinate(0.0, 0.00005)),
+            maneuvers = listOf(
+                RouteManeuver(
+                    id = "arrive",
+                    coordinate = Coordinate(0.0, 0.00005),
+                    instruction = "You have arrived",
+                    turnType = TurnType.ARRIVE,
+                    roadName = "Destination",
+                    distanceFromPreviousMeters = 10.0,
+                    distanceToNextMeters = 0.0,
+                    authorization = ManeuverAuthorization.REQUIRED_SIMON_SAYS,
+                    headingBefore = 0.0,
+                    headingAfter = 0.0
+                )
+            ),
+            totalDistanceMeters = 10.0,
+            totalDurationSeconds = 10.0,
+            etaEpochSeconds = 1L
+        )
+
+        val started = engine.begin(route)
+        val updated = engine.update(
+            previousState = started,
+            previousLocation = sample(0.0, 0.0, 0f),
+            currentLocation = sample(0.0, 0.00005, 0f),
+            distanceUnit = DistanceUnit.IMPERIAL,
+            promptPersonality = PromptPersonality.CLASSIC_SIMON
+        )
+
+        assertThat(started.arrivalStatus).isEqualTo(ArrivalStatus.APPROACHING_DESTINATION)
+        assertThat(updated.arrivalStatus).isEqualTo(ArrivalStatus.ARRIVED)
+        assertThat(updated.navigationActive).isFalse()
+        assertThat(updated.spokenPrompt).isEqualTo("You have arrived. Simon approves.")
     }
 
     @Test
