@@ -19,7 +19,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **UI:** Kotlin + Jetpack Compose + Navigation Compose.
 - **Architecture:** MVVM with clear domain/data/UI separation.
 - **DI:** Hilt.
-- **Map rendering:** MapLibre Android SDK with an OSM-friendly public style URL placeholder.
+- **Map rendering:** MapLibre Android SDK with environment-driven style configuration, a safe development fallback, and production/self-hosted deployment scaffolding.
 - **Routing:** Provider-selectable routing through a swappable `RoutingRepository` abstraction with provider adapters.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
 - **Persistence:** DataStore for settings, lightweight search/route caches, and a persisted active-navigation snapshot for safe session restoration.
@@ -72,7 +72,7 @@ The routing layer now separates provider selection from provider implementation:
 - `ProviderRoutingRepository` adapters register concrete providers such as OSRM and GraphHopper.
 - `SelectingRoutingRepository` reads the persisted user setting and resolves the active provider, falling back to the configured default provider when the requested provider is unsupported or unconfigured.
 
-Default/provider-specific properties live in `gradle.properties` and can be overridden with environment-specific Gradle properties:
+Default/provider-specific properties live in `gradle.properties` and can be overridden with environment-specific Gradle properties or environment variables of the same name:
 
 - `DEFAULT_ROUTING_PROVIDER=OSRM`
 - `OSRM_BASE_URL=https://router.project-osrm.org/`
@@ -81,7 +81,9 @@ Default/provider-specific properties live in `gradle.properties` and can be over
 - `GRAPH_HOPPER_PROFILE=car`
 - `VALHALLA_BASE_URL=https://valhalla1.openstreetmap.de/`
 - `NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org/`
-- `MAP_STYLE_URL=https://demotiles.maplibre.org/style.json`
+- `MAP_STYLE_URL=`
+- `MAP_STYLE_FALLBACK_URL=https://demotiles.maplibre.org/style.json`
+- `ALLOW_HTTP_MAP_STYLE_URL=false`
 
 #### Supported providers
 
@@ -92,6 +94,44 @@ Default/provider-specific properties live in `gradle.properties` and can be over
 ### API/base URL configuration
 
 The app builds with placeholder/default public endpoints via `gradle.properties`. For a more production-minded deployment, point these to your own hosted OSRM/Nominatim/tiles infrastructure or a paid routing provider. GraphHopper additionally requires a valid API key.
+
+### Map style configuration
+
+The app no longer assumes a single demo map style URL. Instead, the map style is resolved from a small configuration model intended to work for local development, CI, and production:
+
+1. `MAP_STYLE_URL` is the primary environment-driven MapLibre style JSON URL.
+2. `MAP_STYLE_FALLBACK_URL` is a safe fallback used when `MAP_STYLE_URL` is blank or invalid. The repo defaults this to the public MapLibre demo style so the app still renders out of the box.
+3. `ALLOW_HTTP_MAP_STYLE_URL` defaults to `false` so production-style misconfiguration does not silently point the app at insecure remote HTTP endpoints.
+
+Resolution rules:
+
+- Gradle property values win first.
+- Environment variables with the same names are supported next, which makes CI/deployment configuration straightforward.
+- If `MAP_STYLE_URL` is blank, malformed, or uses insecure remote HTTP when `ALLOW_HTTP_MAP_STYLE_URL=false`, the app logs a warning, shows a small in-app fallback notice over the map, and uses `MAP_STYLE_FALLBACK_URL` instead.
+- Local development hosts such as `localhost`, `127.0.0.1`, and Android emulator loopback `10.0.2.2` are allowed over HTTP without flipping the global insecure flag.
+
+Recommended override locations:
+
+- **Per developer machine:** `~/.gradle/gradle.properties`
+- **Per CI job:** environment variables like `MAP_STYLE_URL`, `MAP_STYLE_FALLBACK_URL`, and `ALLOW_HTTP_MAP_STYLE_URL`
+- **Per invocation:** `./gradlew assembleDebug -PMAP_STYLE_URL=https://maps.example.com/styles/mobile/style.json`
+
+Example development overrides:
+
+```properties
+MAP_STYLE_URL=http://10.0.2.2:8080/styles/dev/style.json
+ALLOW_HTTP_MAP_STYLE_URL=false
+```
+
+Example production/hosted overrides:
+
+```properties
+MAP_STYLE_URL=https://maps.example.com/styles/mobile/style.json
+MAP_STYLE_FALLBACK_URL=https://maps.example.com/styles/mobile/fallback.json
+ALLOW_HTTP_MAP_STYLE_URL=false
+```
+
+For a fuller deployment guide, including self-hosted stack notes, see [`docs/map_style_configuration.md`](docs/map_style_configuration.md).
 
 ## Simon Says rules
 
@@ -166,6 +206,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 ## Known limitations
 
 - Public OSRM and Nominatim endpoints are convenient defaults but are not sufficient for real production scale.
+- The checked-in fallback map style remains a development-safe default and should be replaced by environment configuration in real production deployments.
 - GraphHopper support depends on a configured API key and currently uses a lightweight maneuver mapping based on the Directions API instruction sign values.
 - Valhalla is scaffolded for selection/configuration but not yet implemented as a concrete routing adapter.
 - Offline support in this phase is intentionally lightweight: repeated destination queries and the latest matching route preview are cached, but the app does not perform full offline routing.
@@ -193,7 +234,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
 - Expand lane guidance from the current provider-ready UI/domain scaffold into provider-backed lane-level instructions.
 - Expand the partial Valhalla scaffold into a concrete adapter.
-- Replace demo style URL with a self-hosted production tile/style stack.
+- Finish wiring a richer settings/debug surface for inspecting resolved map-style metadata at runtime if operational support needs it later.
 
 ## TODOs
 

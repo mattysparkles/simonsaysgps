@@ -6,6 +6,17 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+fun org.gradle.api.provider.ProviderFactory.stringConfig(name: String, defaultValue: String) =
+    gradleProperty(name)
+        .orElse(environmentVariable(name))
+        .orElse(defaultValue)
+
+fun org.gradle.api.provider.ProviderFactory.booleanConfig(name: String, defaultValue: Boolean) =
+    gradleProperty(name)
+        .orElse(environmentVariable(name))
+        .map { value -> value.equals("true", ignoreCase = true) }
+        .orElse(defaultValue)
+
 android {
     namespace = "com.simonsaysgps"
     compileSdk = 36
@@ -20,14 +31,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
-        buildConfigField("String", "OSRM_BASE_URL", "\"${providers.gradleProperty("OSRM_BASE_URL").orElse("https://router.project-osrm.org/").get()}\"")
-        buildConfigField("String", "GRAPH_HOPPER_BASE_URL", "\"${providers.gradleProperty("GRAPH_HOPPER_BASE_URL").orElse("https://graphhopper.com/api/1/").get()}\"")
-        buildConfigField("String", "VALHALLA_BASE_URL", "\"${providers.gradleProperty("VALHALLA_BASE_URL").orElse("https://valhalla1.openstreetmap.de/").get()}\"")
-        buildConfigField("String", "DEFAULT_ROUTING_PROVIDER", "\"${providers.gradleProperty("DEFAULT_ROUTING_PROVIDER").orElse("OSRM").get()}\"")
-        buildConfigField("String", "GRAPH_HOPPER_API_KEY", "\"${providers.gradleProperty("GRAPH_HOPPER_API_KEY").orElse("").get()}\"")
-        buildConfigField("String", "GRAPH_HOPPER_PROFILE", "\"${providers.gradleProperty("GRAPH_HOPPER_PROFILE").orElse("car").get()}\"")
-        buildConfigField("String", "NOMINATIM_BASE_URL", "\"${providers.gradleProperty("NOMINATIM_BASE_URL").orElse("https://nominatim.openstreetmap.org/").get()}\"")
-        buildConfigField("String", "MAP_STYLE_URL", "\"${providers.gradleProperty("MAP_STYLE_URL").orElse("https://demotiles.maplibre.org/style.json").get()}\"")
+        buildConfigField("String", "OSRM_BASE_URL", "\"${providers.stringConfig("OSRM_BASE_URL", "https://router.project-osrm.org/").get()}\"")
+        buildConfigField("String", "GRAPH_HOPPER_BASE_URL", "\"${providers.stringConfig("GRAPH_HOPPER_BASE_URL", "https://graphhopper.com/api/1/").get()}\"")
+        buildConfigField("String", "VALHALLA_BASE_URL", "\"${providers.stringConfig("VALHALLA_BASE_URL", "https://valhalla1.openstreetmap.de/").get()}\"")
+        buildConfigField("String", "DEFAULT_ROUTING_PROVIDER", "\"${providers.stringConfig("DEFAULT_ROUTING_PROVIDER", "OSRM").get()}\"")
+        buildConfigField("String", "GRAPH_HOPPER_API_KEY", "\"${providers.stringConfig("GRAPH_HOPPER_API_KEY", "").get()}\"")
+        buildConfigField("String", "GRAPH_HOPPER_PROFILE", "\"${providers.stringConfig("GRAPH_HOPPER_PROFILE", "car").get()}\"")
+        buildConfigField("String", "NOMINATIM_BASE_URL", "\"${providers.stringConfig("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org/").get()}\"")
+        buildConfigField("String", "MAP_STYLE_URL", "\"${providers.stringConfig("MAP_STYLE_URL", "").get()}\"")
+        buildConfigField("String", "MAP_STYLE_FALLBACK_URL", "\"${providers.stringConfig("MAP_STYLE_FALLBACK_URL", "https://demotiles.maplibre.org/style.json").get()}\"")
+        buildConfigField("boolean", "ALLOW_HTTP_MAP_STYLE_URL", providers.booleanConfig("ALLOW_HTTP_MAP_STYLE_URL", false).get().toString())
     }
 
     buildTypes {
