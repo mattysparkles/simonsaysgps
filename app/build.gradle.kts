@@ -21,6 +21,11 @@ android {
         vectorDrawables.useSupportLibrary = true
 
         buildConfigField("String", "OSRM_BASE_URL", "\"${providers.gradleProperty("OSRM_BASE_URL").orElse("https://router.project-osrm.org/").get()}\"")
+        buildConfigField("String", "GRAPH_HOPPER_BASE_URL", "\"${providers.gradleProperty("GRAPH_HOPPER_BASE_URL").orElse("https://graphhopper.com/api/1/").get()}\"")
+        buildConfigField("String", "VALHALLA_BASE_URL", "\"${providers.gradleProperty("VALHALLA_BASE_URL").orElse("https://valhalla1.openstreetmap.de/").get()}\"")
+        buildConfigField("String", "DEFAULT_ROUTING_PROVIDER", "\"${providers.gradleProperty("DEFAULT_ROUTING_PROVIDER").orElse("OSRM").get()}\"")
+        buildConfigField("String", "GRAPH_HOPPER_API_KEY", "\"${providers.gradleProperty("GRAPH_HOPPER_API_KEY").orElse("").get()}\"")
+        buildConfigField("String", "GRAPH_HOPPER_PROFILE", "\"${providers.gradleProperty("GRAPH_HOPPER_PROFILE").orElse("car").get()}\"")
         buildConfigField("String", "NOMINATIM_BASE_URL", "\"${providers.gradleProperty("NOMINATIM_BASE_URL").orElse("https://nominatim.openstreetmap.org/").get()}\"")
         buildConfigField("String", "MAP_STYLE_URL", "\"${providers.gradleProperty("MAP_STYLE_URL").orElse("https://demotiles.maplibre.org/style.json").get()}\"")
     }

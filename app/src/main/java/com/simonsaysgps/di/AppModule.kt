@@ -1,16 +1,22 @@
 package com.simonsaysgps.di
 
 import com.simonsaysgps.BuildConfig
+import com.simonsaysgps.data.remote.GraphHopperApi
 import com.simonsaysgps.data.remote.NominatimApi
 import com.simonsaysgps.data.remote.OsrmApi
 import com.simonsaysgps.data.repository.DataStoreRecentDestinationRepository
 import com.simonsaysgps.data.repository.DataStoreRouteCacheStore
 import com.simonsaysgps.data.repository.DataStoreSearchCacheStore
+import com.simonsaysgps.data.repository.GraphHopperRoutingRepository
 import com.simonsaysgps.data.repository.RetryOnFailureInterceptor
 import com.simonsaysgps.data.repository.DataStoreSettingsRepository
 import com.simonsaysgps.data.repository.NominatimGeocodingRepository
 import com.simonsaysgps.data.repository.OsrmRoutingRepository
+import com.simonsaysgps.data.repository.RoutingProviderConfiguration
+import com.simonsaysgps.data.repository.SelectingRoutingRepository
+import com.simonsaysgps.domain.model.RoutingProvider
 import com.simonsaysgps.domain.repository.GeocodingRepository
+import com.simonsaysgps.domain.repository.ProviderRoutingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RouteCacheStore
 import com.simonsaysgps.domain.repository.SearchCacheStore
@@ -26,6 +32,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
 import javax.inject.Named
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
@@ -59,6 +66,15 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideRoutingProviderConfiguration(): RoutingProviderConfiguration = RoutingProviderConfiguration(
+        defaultProvider = RoutingProvider.fromNameOrDefault(BuildConfig.DEFAULT_ROUTING_PROVIDER),
+        graphHopperApiKey = BuildConfig.GRAPH_HOPPER_API_KEY,
+        graphHopperProfile = BuildConfig.GRAPH_HOPPER_PROFILE,
+        valhallaBaseUrl = BuildConfig.VALHALLA_BASE_URL
+    )
+
+    @Provides
+    @Singleton
     @Named("nominatim")
     fun provideNominatimRetrofit(client: OkHttpClient, moshi: Moshi): Retrofit = Retrofit.Builder()
         .baseUrl(BuildConfig.NOMINATIM_BASE_URL)
@@ -77,18 +93,39 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("graphhopper")
+    fun provideGraphHopperRetrofit(client: OkHttpClient, moshi: Moshi): Retrofit = Retrofit.Builder()
+        .baseUrl(BuildConfig.GRAPH_HOPPER_BASE_URL)
+        .client(client)
+        .addConverterFactory(MoshiConverterFactory.create(moshi))
+        .build()
+
+    @Provides
+    @Singleton
     fun provideNominatimApi(@Named("nominatim") retrofit: Retrofit): NominatimApi = retrofit.create(NominatimApi::class.java)
 
     @Provides
     @Singleton
     fun provideOsrmApi(@Named("osrm") retrofit: Retrofit): OsrmApi = retrofit.create(OsrmApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideGraphHopperApi(@Named("graphhopper") retrofit: Retrofit): GraphHopperApi = retrofit.create(GraphHopperApi::class.java)
 }
 
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
     @Binds
-    abstract fun bindRoutingRepository(impl: OsrmRoutingRepository): RoutingRepository
+    abstract fun bindRoutingRepository(impl: SelectingRoutingRepository): RoutingRepository
+
+    @Binds
+    @IntoSet
+    abstract fun bindOsrmRoutingRepository(impl: OsrmRoutingRepository): ProviderRoutingRepository
+
+    @Binds
+    @IntoSet
+    abstract fun bindGraphHopperRoutingRepository(impl: GraphHopperRoutingRepository): ProviderRoutingRepository
 
     @Binds
     abstract fun bindGeocodingRepository(impl: NominatimGeocodingRepository): GeocodingRepository

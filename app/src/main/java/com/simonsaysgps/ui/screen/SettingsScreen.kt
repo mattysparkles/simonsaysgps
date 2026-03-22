@@ -20,6 +20,7 @@ import com.simonsaysgps.domain.model.DistanceUnit
 import com.simonsaysgps.domain.model.GameMode
 import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.PromptFrequency
+import com.simonsaysgps.domain.model.RoutingProvider
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 
 @Composable
@@ -35,6 +36,12 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             ToggleCard("Voice prompts", settings.voiceEnabled) { value -> viewModel.updateSettings { it.copy(voiceEnabled = value) } }
             ToggleCard("Debug overlay", settings.debugMode) { value -> viewModel.updateSettings { it.copy(debugMode = value) } }
             ToggleCard("Demo mode", settings.demoMode) { value -> viewModel.updateSettings { it.copy(demoMode = value) } }
+            ChoiceCard(
+                title = "Routing provider",
+                options = RoutingProvider.entries.map { it.name to "${it.displayName} — ${it.description}" },
+                selected = settings.routingProvider.name,
+                onSelected = { selected -> viewModel.updateSettings { it.copy(routingProvider = RoutingProvider.valueOf(selected)) } }
+            )
             ChoiceCard(
                 title = "Game mode",
                 options = listOf(GameMode.BASIC.name to "Basic", GameMode.MISCHIEF.name to "Mischief"),
