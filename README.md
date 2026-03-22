@@ -13,6 +13,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Detect upcoming maneuvers and decide whether a turn was authorized, missed, or unauthorized.
 - Reroute with playful prompts like: _"Oh, Simon didn't say. Rerouting."_
 - Offer a debug overlay, demo mode, and a routing-provider selector for emulator testing and provider experiments.
+- Add an Explore tab foundation with intent chips, ranked results, explainable suggestion reasons, configurable safety/detour rules, and demo providers that exercise the existing location/map stack.
 
 ## Stack choices
 
@@ -22,7 +23,8 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Map rendering:** MapLibre Android SDK with environment-driven style configuration, a safe development fallback, and production/self-hosted deployment scaffolding.
 - **Routing:** Provider-selectable routing through a swappable `RoutingRepository` abstraction with provider adapters.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
-- **Persistence:** DataStore for settings, lightweight search/route caches, and a persisted active-navigation snapshot for safe session restoration.
+- **Persistence:** DataStore for settings, Explore preferences, lightweight search/route caches, and a persisted active-navigation snapshot for safe session restoration.
+- **Explore discovery:** A dedicated Explore domain stack with provider abstractions for place data, event data, visit history, reviews, promotions, plus an isolated ranking engine.
 - **Background resilience:** WorkManager coordinates deferred session recovery checks, while the foreground service remains responsible for real-time navigation.
 - **Prompt personalities:** Data-driven prompt profiles, making it easy to add new Simon tones later.
 - **Location:** Fused Location Provider, plus a demo simulator for emulator testing.
@@ -133,6 +135,84 @@ ALLOW_HTTP_MAP_STYLE_URL=false
 
 For a fuller deployment guide, including self-hosted stack notes, see [`docs/map_style_configuration.md`](docs/map_style_configuration.md).
 
+## Explore foundation
+
+The app now includes an initial **Explore** experience built for clean architecture first, not fake completeness:
+
+- A top-level **Explore** entry with the prompt **“Take me Somewhere…”**.
+- Intent chips for: Delicious, Fun, Open Now, I've Never Been, Quiet, Outdoors, Important, Close to Home, On My Way, Special, New, I Can Shop, I Can Learn, Good for Kids, and Having a Sale.
+- A dedicated Explore results screen showing ranked cards with address, status/timing, distance or off-route distance, review summary, and a short explanation of why each suggestion was chosen.
+- Quick actions for preview on map, start navigation, save, see reviews, and leave review. The review actions are intentionally scaffolded as product-ready stubs in this phase.
+- A dedicated Explore settings screen persisted through DataStore.
+
+### Explore architecture
+
+The Explore foundation is split across the existing module boundaries:
+
+- `:navigation` now owns the Explore domain models, provider contracts, heuristics, ranking engine, orchestrator abstraction, and ranking/unit tests.
+- `:app` owns DataStore persistence for `ExploreSettings`, demo/fake provider implementations, repository wiring, and the Compose Explore screens.
+
+Core Explore contracts introduced in this PR:
+
+- `ExploreCategory`
+- `ExploreSettings`
+- `ExploreQuery`
+- `ExploreCandidate`
+- `ExploreResult`
+- `ExploreReason`
+- `ExploreRepository`
+- `ExploreOrchestrator`
+- Provider interfaces for place discovery, event discovery, visit history, reviews, and promotions
+
+### Explore provider strategy in this phase
+
+This PR intentionally does **not** pretend every Explore signal is production-complete on day one. Instead:
+
+- A working provider path uses the existing current-location/map flow plus a nearby demo catalog that generates plausible places around the user.
+- Visit history is driven by existing recent-destination persistence so novelty and “I've Never Been” are already testable.
+- Event, review, and promotion providers are scaffolded with demo/fake data and status reporting.
+- Provider availability is surfaced in the UI so fallbacks are visible and debuggable.
+
+### Explore settings now implemented
+
+Persisted settings now include:
+
+- default radius in miles
+- require open now by default
+- suggestion count (`1 auto-pick` or `3 choices`)
+- allow route detours while navigating
+- max detour distance/time
+- use event data when available
+- use internal reviews first
+- include third-party review summaries when available
+- home reference (saved from current location in this phase)
+- surprise-me weighting
+- kid-friendly filter
+- quiet-preference strictness
+- accessible-places preference
+- avoid alcohol-focused venues
+- avoid adult-oriented venues
+
+### Explore limitations and follow-up work
+
+Implemented now:
+
+- explainable ranking pipeline
+- demo providers and graceful fallback handling
+- Compose Explore shell, results, and settings UI
+- first-run walkthrough stub
+- ranking/category/settings tests
+
+Still future work:
+
+- real external place/event/deal providers
+- production review and save/review-write backends
+- richer home-address search/selection flow
+- deeper route-detour estimation tied to routing-provider ETAs
+- analytics/telemetry and moderation around review content
+
+**No binary files were added in this Explore PR.**
+
 ## Simon Says rules
 
 ### Basic mode
@@ -235,6 +315,8 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Expand lane guidance from the current provider-ready UI/domain scaffold into provider-backed lane-level instructions.
 - Expand the partial Valhalla scaffold into a concrete adapter.
 - Finish wiring a richer settings/debug surface for inspecting resolved map-style metadata at runtime if operational support needs it later.
+- Swap demo Explore providers with production-backed place/event/review/deal integrations behind the same contracts.
+- Extend the Explore review/save quick-action stubs into fully backed account-aware flows.
 
 ## TODOs
 

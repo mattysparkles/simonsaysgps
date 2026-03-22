@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.PlaceResult
 import com.simonsaysgps.ui.components.MapLibreMapView
+import com.simonsaysgps.ui.components.TopLevelDestination
+import com.simonsaysgps.ui.components.TopLevelNavigationBar
 import com.simonsaysgps.ui.test.UiTestTags
 import com.simonsaysgps.ui.viewmodel.AppUiState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
@@ -49,6 +51,7 @@ fun MapSearchScreen(
     viewModel: AppViewModel,
     onRouteReady: () -> Unit,
     onSettingsClick: () -> Unit,
+    onExploreClick: () -> Unit,
     requestLocationPermission: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -62,6 +65,7 @@ fun MapSearchScreen(
             onRouteReady()
         },
         onSettingsClick = onSettingsClick,
+        onExploreClick = onExploreClick,
         onRequestLocationPermission = requestLocationPermission,
         onRemoveRecentDestination = viewModel::removeRecentDestination,
         onClearRecentDestinations = viewModel::clearRecentDestinations
@@ -77,6 +81,7 @@ fun MapSearchScreenContent(
     onPlaceSelected: (PlaceResult) -> Unit,
     onPreviewRoute: () -> Unit,
     onSettingsClick: () -> Unit,
+    onExploreClick: () -> Unit,
     onRequestLocationPermission: () -> Unit,
     onRemoveRecentDestination: (String) -> Unit,
     onClearRecentDestinations: () -> Unit,
@@ -95,6 +100,13 @@ fun MapSearchScreenContent(
             TopAppBar(
                 title = { Text("Simon Says GPS") },
                 actions = { IconButton(onClick = onSettingsClick) { Icon(Icons.Default.Settings, contentDescription = null) } }
+            )
+        },
+        bottomBar = {
+            TopLevelNavigationBar(
+                selected = TopLevelDestination.MAP,
+                onMapClick = {},
+                onExploreClick = onExploreClick
             )
         }
     ) { padding ->

@@ -17,6 +17,12 @@ import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SettingsModel
+import com.simonsaysgps.domain.model.explore.ExploreCategory
+import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
+import com.simonsaysgps.domain.model.explore.ExploreQuery
+import com.simonsaysgps.domain.model.explore.ExploreResponse
+import com.simonsaysgps.domain.model.explore.ExploreResult
+import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.domain.model.TurnType
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
@@ -254,7 +260,8 @@ class AppViewModelTest {
             simonSaysEngine = engine,
             voicePromptManager = voicePromptManager,
             navigationForegroundServiceController = serviceController,
-            navigationSessionOrchestrator = navigationSessionOrchestrator
+            navigationSessionOrchestrator = navigationSessionOrchestrator,
+            exploreOrchestrator = exploreOrchestrator
         )
 
         viewModel.onLocationPermissionResult(true)
@@ -277,7 +284,8 @@ class AppViewModelTest {
         route: Route = routeWithSingleManeuver(),
         geocodingRepository: GeocodingRepository = FakeGeocodingRepository(),
         recentDestinationRepository: RecentDestinationRepository = FakeRecentDestinationRepository(),
-        navigationSessionOrchestrator: FakeNavigationSessionOrchestrator = FakeNavigationSessionOrchestrator()
+        navigationSessionOrchestrator: FakeNavigationSessionOrchestrator = FakeNavigationSessionOrchestrator(),
+        exploreOrchestrator: ExploreOrchestrator = FakeExploreOrchestrator()
     ): AppViewModel {
         val routingRepository = mockk<RoutingRepository>()
         val fusedLocationRepository = mockk<FusedLocationRepository>()
@@ -304,7 +312,8 @@ class AppViewModelTest {
             simonSaysEngine = engine,
             voicePromptManager = voicePromptManager,
             navigationForegroundServiceController = serviceController,
-            navigationSessionOrchestrator = navigationSessionOrchestrator
+            navigationSessionOrchestrator = navigationSessionOrchestrator,
+            exploreOrchestrator = FakeExploreOrchestrator()
         )
     }
 
@@ -386,6 +395,33 @@ class AppViewModelTest {
         override suspend fun clear() {
             recent.value = emptyList()
         }
+    }
+
+
+    private class FakeExploreOrchestrator : ExploreOrchestrator {
+        override suspend fun explore(query: ExploreQuery): ExploreResponse = ExploreResponse(
+            results = listOf(
+                ExploreResult(
+                    candidate = com.simonsaysgps.domain.model.explore.ExploreCandidate(
+                        id = "explore",
+                        name = "Explore Place",
+                        typeLabel = "Cafe",
+                        address = "1 Explore Way",
+                        coordinate = query.userLocation,
+                        facets = setOf(com.simonsaysgps.domain.model.explore.ExploreFacet.FOOD),
+                        openNow = true
+                    ),
+                    score = 0.9,
+                    confidence = 0.8f,
+                    distanceMeters = 10.0,
+                    reasons = emptyList(),
+                    debugBreakdown = mapOf("category" to 1.0)
+                )
+            ),
+            providerStatuses = listOf(ExploreProviderStatus("place-data", true, "OK")),
+            autoPicked = query.category == ExploreCategory.OPEN_NOW,
+            totalCandidatesConsidered = 1
+        )
     }
 
     private class FakeNavigationSessionOrchestrator(

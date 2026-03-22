@@ -27,6 +27,20 @@ import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.VoicePromptManager
+import com.simonsaysgps.data.explore.DemoEventDataProvider
+import com.simonsaysgps.data.explore.DemoPlaceDataProvider
+import com.simonsaysgps.data.explore.DemoPromotionsProvider
+import com.simonsaysgps.data.explore.DemoReviewsProvider
+import com.simonsaysgps.data.explore.RecentDestinationVisitHistoryProvider
+import com.simonsaysgps.data.repository.explore.DefaultExploreRepository
+import com.simonsaysgps.domain.repository.explore.EventDataProvider
+import com.simonsaysgps.domain.repository.explore.ExploreRepository
+import com.simonsaysgps.domain.repository.explore.PlaceDataProvider
+import com.simonsaysgps.domain.repository.explore.PromotionsProvider
+import com.simonsaysgps.domain.repository.explore.ReviewsProvider
+import com.simonsaysgps.domain.repository.explore.UserVisitHistoryProvider
+import com.simonsaysgps.domain.service.explore.DefaultExploreOrchestrator
+import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.service.AndroidNavigationForegroundServiceController
 import com.simonsaysgps.service.WorkManagerNavigationSessionOrchestrator
 import com.simonsaysgps.service.AndroidVoicePromptManager
@@ -126,6 +140,10 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideGraphHopperApi(@Named("graphhopper") retrofit: Retrofit): GraphHopperApi = retrofit.create(GraphHopperApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideExploreOrchestrator(repository: ExploreRepository): ExploreOrchestrator = DefaultExploreOrchestrator(repository)
 }
 
 @Module
@@ -168,4 +186,22 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindNavigationSessionOrchestrator(impl: WorkManagerNavigationSessionOrchestrator): NavigationSessionOrchestrator
+
+    @Binds
+    abstract fun bindExploreRepository(impl: DefaultExploreRepository): ExploreRepository
+
+    @Binds
+    abstract fun bindPlaceDataProvider(impl: DemoPlaceDataProvider): PlaceDataProvider
+
+    @Binds
+    abstract fun bindEventDataProvider(impl: DemoEventDataProvider): EventDataProvider
+
+    @Binds
+    abstract fun bindVisitHistoryProvider(impl: RecentDestinationVisitHistoryProvider): UserVisitHistoryProvider
+
+    @Binds
+    abstract fun bindReviewsProvider(impl: DemoReviewsProvider): ReviewsProvider
+
+    @Binds
+    abstract fun bindPromotionsProvider(impl: DemoPromotionsProvider): PromotionsProvider
 }
