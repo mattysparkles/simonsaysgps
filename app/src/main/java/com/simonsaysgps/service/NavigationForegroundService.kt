@@ -7,16 +7,37 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.simonsaysgps.R
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class NavigationForegroundService : Service() {
+    @Inject lateinit var stateTracker: NavigationServiceStateTracker
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action ?: ACTION_START
+        Log.d(TAG, "onStartCommand action=$action startId=$startId flags=$flags")
+        if (action != ACTION_START) {
+            Log.w(TAG, "Unexpected action=$action. Keeping existing foreground session state.")
+        }
+
         createChannel()
-        startForeground(1001, buildNotification())
+        startForeground(NOTIFICATION_ID, buildNotification())
+        stateTracker.markRunning()
+        Log.i(TAG, "Foreground navigation service is active.")
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        Log.i(TAG, "Foreground navigation service is stopping.")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stateTracker.markStopped()
+        super.onDestroy()
     }
 
     private fun createChannel() {
@@ -36,10 +57,15 @@ class NavigationForegroundService : Service() {
             .setContentText("Navigation is active.")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .build()
     }
 
     companion object {
+        const val ACTION_START = "com.simonsaysgps.action.START_NAVIGATION_FOREGROUND"
+
+        private const val TAG = "NavigationFgService"
         private const val CHANNEL_ID = "navigation"
+        private const val NOTIFICATION_ID = 1001
     }
 }

@@ -1,28 +1,24 @@
 package com.simonsaysgps.di
 
 import com.simonsaysgps.BuildConfig
-import com.simonsaysgps.data.location.DemoLocationRepository
-import com.simonsaysgps.data.location.FusedLocationRepository
 import com.simonsaysgps.data.remote.NominatimApi
 import com.simonsaysgps.data.remote.OsrmApi
 import com.simonsaysgps.data.repository.DataStoreSettingsRepository
 import com.simonsaysgps.data.repository.NominatimGeocodingRepository
 import com.simonsaysgps.data.repository.OsrmRoutingRepository
 import com.simonsaysgps.domain.repository.GeocodingRepository
-import com.simonsaysgps.domain.repository.LocationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
+import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.VoicePromptManager
+import com.simonsaysgps.service.AndroidNavigationForegroundServiceController
 import com.simonsaysgps.service.AndroidVoicePromptManager
 import com.squareup.moshi.Moshi
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.components.ViewModelComponent
 import dagger.hilt.components.SingletonComponent
-import dagger.hilt.android.scopes.ViewModelScoped
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Named
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
@@ -91,4 +87,7 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindVoicePromptManager(impl: AndroidVoicePromptManager): VoicePromptManager
+
+    @Binds
+    abstract fun bindNavigationForegroundServiceController(impl: AndroidNavigationForegroundServiceController): NavigationForegroundServiceController
 }
