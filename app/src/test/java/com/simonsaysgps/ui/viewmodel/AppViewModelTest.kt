@@ -22,6 +22,7 @@ import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
+import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.PromptFactory
 import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
@@ -63,11 +64,13 @@ class AppViewModelTest {
         val locationFlow = MutableSharedFlow<LocationSample>(extraBufferCapacity = 4)
         val serviceController = FakeNavigationForegroundServiceController()
         val voicePromptManager = mockk<VoicePromptManager>(relaxed = true)
+        val orchestrator = FakeNavigationSessionOrchestrator()
         val viewModel = createViewModel(
             locationFlow = locationFlow,
             serviceController = serviceController,
             voicePromptManager = voicePromptManager,
-            route = routeWithSingleManeuver()
+            route = routeWithSingleManeuver(),
+            navigationSessionOrchestrator = orchestrator
         )
 
         viewModel.onLocationPermissionResult(true)
@@ -85,6 +88,7 @@ class AppViewModelTest {
 
         assertThat(serviceController.startReasons).containsExactly("turn-by-turn navigation began")
         assertThat(serviceController.stopReasons).containsExactly("user ended navigation")
+        assertThat(orchestrator.syncedStates.map { it.navigationActive }).containsExactly(true, false).inOrder()
         verify(exactly = 1) { voicePromptManager.stop() }
     }
 
@@ -117,6 +121,31 @@ class AppViewModelTest {
         assertThat(serviceController.stopReasons).containsExactly("destination reached")
         verify(exactly = 1) { voicePromptManager.stop() }
         verify { voicePromptManager.speak(any()) }
+    }
+
+    @Test
+    fun `restored persisted navigation session repopulates ui state and restarts orchestration`() = runTest(dispatcher) {
+        val restoredState = com.simonsaysgps.domain.model.NavigationSessionState(
+            route = routeWithSingleManeuver(),
+            currentLocation = sample(0.0, 0.0, 0f),
+            activeManeuverIndex = 0,
+            upcomingManeuver = routeWithSingleManeuver().maneuvers.first(),
+            navigationActive = true
+        )
+        val serviceController = FakeNavigationForegroundServiceController()
+        val orchestrator = FakeNavigationSessionOrchestrator(restoredSession = restoredState)
+        val viewModel = createViewModel(
+            serviceController = serviceController,
+            navigationSessionOrchestrator = orchestrator
+        )
+
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.navigationState).isEqualTo(restoredState)
+        assertThat(viewModel.uiState.value.routePreview).isEqualTo(restoredState.route)
+        assertThat(viewModel.uiState.value.currentLocation).isEqualTo(restoredState.currentLocation)
+        assertThat(orchestrator.ensuredForegroundReasons).containsExactly("restored persisted navigation session")
+        assertThat(orchestrator.restoreCalls).isEqualTo(1)
     }
 
     @Test
@@ -204,6 +233,7 @@ class AppViewModelTest {
         val serviceController = FakeNavigationForegroundServiceController()
         val voicePromptManager = mockk<VoicePromptManager>(relaxed = true)
         val settingsRepository = FakeSettingsRepository()
+        val navigationSessionOrchestrator = FakeNavigationSessionOrchestrator()
         val engine = SimonSaysEngine(TurnDetector(), PromptFactory())
         val navigationUseCase = ObserveNavigationSessionUseCase(routingRepository = routingRepository, simonSaysEngine = engine)
 
@@ -221,7 +251,8 @@ class AppViewModelTest {
             navigationUseCase = navigationUseCase,
             simonSaysEngine = engine,
             voicePromptManager = voicePromptManager,
-            navigationForegroundServiceController = serviceController
+            navigationForegroundServiceController = serviceController,
+            navigationSessionOrchestrator = navigationSessionOrchestrator
         )
 
         viewModel.onLocationPermissionResult(true)
@@ -243,7 +274,8 @@ class AppViewModelTest {
         voicePromptManager: VoicePromptManager = mockk(relaxed = true),
         route: Route = routeWithSingleManeuver(),
         geocodingRepository: GeocodingRepository = FakeGeocodingRepository(),
-        recentDestinationRepository: RecentDestinationRepository = FakeRecentDestinationRepository()
+        recentDestinationRepository: RecentDestinationRepository = FakeRecentDestinationRepository(),
+        navigationSessionOrchestrator: FakeNavigationSessionOrchestrator = FakeNavigationSessionOrchestrator()
     ): AppViewModel {
         val routingRepository = mockk<RoutingRepository>()
         val fusedLocationRepository = mockk<FusedLocationRepository>()
@@ -269,7 +301,8 @@ class AppViewModelTest {
             navigationUseCase = navigationUseCase,
             simonSaysEngine = engine,
             voicePromptManager = voicePromptManager,
-            navigationForegroundServiceController = serviceController
+            navigationForegroundServiceController = serviceController,
+            navigationSessionOrchestrator = navigationSessionOrchestrator
         )
     }
 
@@ -350,6 +383,27 @@ class AppViewModelTest {
 
         override suspend fun clear() {
             recent.value = emptyList()
+        }
+    }
+
+    private class FakeNavigationSessionOrchestrator(
+        private val restoredSession: com.simonsaysgps.domain.model.NavigationSessionState? = null
+    ) : NavigationSessionOrchestrator {
+        var restoreCalls: Int = 0
+        val syncedStates = mutableListOf<com.simonsaysgps.domain.model.NavigationSessionState>()
+        val ensuredForegroundReasons = mutableListOf<String>()
+
+        override suspend fun restoreSession(): com.simonsaysgps.domain.model.NavigationSessionState? {
+            restoreCalls += 1
+            return restoredSession
+        }
+
+        override suspend fun syncSession(state: com.simonsaysgps.domain.model.NavigationSessionState) {
+            syncedStates += state
+        }
+
+        override fun ensureForegroundService(reason: String) {
+            ensuredForegroundReasons += reason
         }
     }
 

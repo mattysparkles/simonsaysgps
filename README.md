@@ -21,7 +21,8 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Map rendering:** MapLibre Android SDK with an OSM-friendly public style URL placeholder.
 - **Routing:** Provider-selectable routing through a swappable `RoutingRepository` abstraction with provider adapters.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
-- **Persistence:** DataStore for settings plus lightweight search/route caches.
+- **Persistence:** DataStore for settings, lightweight search/route caches, and a persisted active-navigation snapshot for safe session restoration.
+- **Background resilience:** WorkManager coordinates deferred session recovery checks, while the foreground service remains responsible for real-time navigation.
 - **Prompt personalities:** Data-driven prompt profiles, making it easy to add new Simon tones later.
 - **Location:** Fused Location Provider, plus a demo simulator for emulator testing.
 
@@ -97,7 +98,15 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
 - Switch **Routing provider** in Settings to validate provider resolution and fallback behavior.
 - Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
-- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, and recent destination persistence/mapping behavior.
+- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, recent destination persistence/mapping behavior, and navigation-session restoration/storage behavior.
+
+## Navigation lifecycle resilience
+
+- Active turn-by-turn sessions are still driven by the foreground service path; WorkManager is **not** used for the per-location navigation loop.
+- While a navigation session is active, the app persists a restorable snapshot of the current route/session state in DataStore.
+- When the app process is recreated or the user reopens the app, the last active session is restored into UI state so the active navigation screen can recover without recomputing the route first.
+- WorkManager schedules a one-time recovery pass plus a unique periodic safety-net check for long-running trips. Those jobs only verify whether an active persisted session should reassert the foreground service after backgrounding or process recreation.
+- When navigation ends, the persisted session snapshot and recovery work are cleared so stale sessions are not revived later.
 
 ## Search/routing cache behavior
 
@@ -117,6 +126,7 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - The initial implementation keeps most functionality in one Android app module for repo simplicity.
 - Map overlay styling is intentionally lightweight for phase 1.
 - The foreground navigation service now starts automatically when active guidance begins and stops automatically when guidance ends, arrives, or is cancelled.
+- Active navigation sessions are now snapshotted to DataStore and can be restored after app reopen or process recreation, with WorkManager providing deferred recovery checks for long-running trips.
 
 ## Phase 1 delivered
 
@@ -136,7 +146,6 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 - Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
 - Add lane guidance, arrival state, and richer maneuver banners.
 - Expand the partial Valhalla scaffold into a concrete adapter.
-- Introduce WorkManager/service orchestration for robust long-running navigation sessions.
 - Add screenshot-based UI tests and instrumentation tests.
 - Replace demo style URL with a self-hosted production tile/style stack.
 

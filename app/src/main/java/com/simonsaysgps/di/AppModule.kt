@@ -4,6 +4,7 @@ import com.simonsaysgps.BuildConfig
 import com.simonsaysgps.data.remote.GraphHopperApi
 import com.simonsaysgps.data.remote.NominatimApi
 import com.simonsaysgps.data.remote.OsrmApi
+import com.simonsaysgps.data.repository.DataStoreNavigationSessionRepository
 import com.simonsaysgps.data.repository.DataStoreRecentDestinationRepository
 import com.simonsaysgps.data.repository.DataStoreRouteCacheStore
 import com.simonsaysgps.data.repository.DataStoreSearchCacheStore
@@ -17,14 +18,17 @@ import com.simonsaysgps.data.repository.SelectingRoutingRepository
 import com.simonsaysgps.domain.model.RoutingProvider
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.ProviderRoutingRepository
+import com.simonsaysgps.domain.repository.NavigationSessionRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RouteCacheStore
 import com.simonsaysgps.domain.repository.SearchCacheStore
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
+import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.service.AndroidNavigationForegroundServiceController
+import com.simonsaysgps.service.WorkManagerNavigationSessionOrchestrator
 import com.simonsaysgps.service.AndroidVoicePromptManager
 import com.squareup.moshi.Moshi
 import dagger.Binds
@@ -33,12 +37,23 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
+import android.content.Context
+import androidx.work.WorkManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Named
 import javax.inject.Singleton
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+    @Provides
+    @Singleton
+    fun provideWorkManager(@ApplicationContext context: Context): WorkManager = WorkManager.getInstance(context)
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -134,6 +149,9 @@ abstract class RepositoryModule {
     abstract fun bindSettingsRepository(impl: DataStoreSettingsRepository): SettingsRepository
 
     @Binds
+    abstract fun bindNavigationSessionRepository(impl: DataStoreNavigationSessionRepository): NavigationSessionRepository
+
+    @Binds
     abstract fun bindRecentDestinationRepository(impl: DataStoreRecentDestinationRepository): RecentDestinationRepository
 
     @Binds
@@ -147,4 +165,7 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindNavigationForegroundServiceController(impl: AndroidNavigationForegroundServiceController): NavigationForegroundServiceController
+
+    @Binds
+    abstract fun bindNavigationSessionOrchestrator(impl: WorkManagerNavigationSessionOrchestrator): NavigationSessionOrchestrator
 }
