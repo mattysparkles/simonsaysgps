@@ -7,6 +7,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Search for destinations with Nominatim.
 - Preview an OSM route on an OpenStreetMap/MapLibre map.
 - Start navigation with spoken prompts powered by Android TextToSpeech.
+- Pick from multiple prompt personalities for spoken and on-screen navigation callouts.
 - Detect upcoming maneuvers and decide whether a turn was authorized, missed, or unauthorized.
 - Reroute with playful prompts like: _"Oh, Simon didn't say. Rerouting."_
 - Offer a debug overlay and demo mode for emulator testing.
@@ -20,6 +21,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - **Routing:** OSRM HTTP API through a swappable `RoutingRepository` abstraction.
 - **Geocoding:** Nominatim through a swappable `GeocodingRepository` abstraction.
 - **Persistence:** DataStore for settings.
+- **Prompt personalities:** Data-driven prompt profiles, making it easy to add new Simon tones later.
 - **Location:** Fused Location Provider, plus a demo simulator for emulator testing.
 
 ## Project structure
@@ -44,6 +46,7 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 3. Run the `app` configuration on a device or emulator.
 4. Grant location permission.
 5. For emulator-first testing, leave **Demo mode** enabled in Settings.
+6. Choose **Prompt personality** in Settings to switch between Classic Simon, Snarky Simon, and Polite Simon. The selected tone is persisted in DataStore and reused by TextToSpeech prompts.
 
 > Note: `gradle/wrapper/gradle-wrapper.jar` is intentionally excluded from the tracked PR. See `docs/BINARY_FILES_MANIFEST.md` for its checksum and regeneration instructions.
 
@@ -71,6 +74,7 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 ## Testing the navigation logic
 
 - Enable **Demo mode** to use a fake location stream in the emulator.
+- Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
 - Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, heading, and last reroute reason.
 - Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, and routing repository mapping behavior.
 
@@ -107,7 +111,6 @@ Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. I
 ## TODOs
 
 - Start/stop the foreground service automatically when navigation begins/ends.
-- Add user-selectable prompt personalities.
 - Add search result debouncing and recent destinations.
 - Tighten missed-turn detection to avoid jitter-driven reroutes.
 - Add offline caches and resilient networking.

@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -116,7 +115,13 @@ class AppViewModel @Inject constructor(
             repo.locationUpdates().collect { location ->
                 val currentState = _uiState.value.navigationState
                 val updatedNavigation = if (currentState.navigationActive) {
-                    navigationUseCase.updateState(currentState, previousLocation, location, settings.value.distanceUnit)
+                    navigationUseCase.updateState(
+                        previousState = currentState,
+                        previousLocation = previousLocation,
+                        currentLocation = location,
+                        distanceUnit = settings.value.distanceUnit,
+                        promptPersonality = settings.value.promptPersonality
+                    )
                 } else {
                     currentState.copy(currentLocation = location)
                 }
