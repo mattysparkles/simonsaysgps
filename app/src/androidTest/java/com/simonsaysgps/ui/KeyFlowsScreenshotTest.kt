@@ -59,6 +59,7 @@ class KeyFlowsScreenshotTest {
                     onPlaceSelected = {},
                     onPreviewRoute = {},
                     onSettingsClick = {},
+                    onExploreClick = {},
                     onRequestLocationPermission = {},
                     onRemoveRecentDestination = {},
                     onClearRecentDestinations = {},

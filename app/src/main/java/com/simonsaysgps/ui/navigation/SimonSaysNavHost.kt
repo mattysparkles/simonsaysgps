@@ -1,7 +1,6 @@
 package com.simonsaysgps.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -11,6 +10,9 @@ import com.simonsaysgps.ui.screen.MapSearchScreen
 import com.simonsaysgps.ui.screen.RoutePreviewScreen
 import com.simonsaysgps.ui.screen.SettingsScreen
 import com.simonsaysgps.ui.screen.SplashScreen
+import com.simonsaysgps.ui.screen.explore.ExploreResultsScreen
+import com.simonsaysgps.ui.screen.explore.ExploreScreen
+import com.simonsaysgps.ui.screen.explore.ExploreSettingsScreen
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 
 @Composable
@@ -28,7 +30,30 @@ fun SimonSaysNavHost(
                 viewModel = appViewModel,
                 onRouteReady = { navController.navigate(Screen.RoutePreview.route) },
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                onExploreClick = { navController.navigate(Screen.Explore.route) },
                 requestLocationPermission = requestLocationPermission
+            )
+        }
+        composable(Screen.Explore.route) {
+            ExploreScreen(
+                viewModel = appViewModel,
+                onMapClick = { navController.navigate(Screen.Map.route) },
+                onExploreResults = { navController.navigate(Screen.ExploreResults.route) },
+                onExploreSettings = { navController.navigate(Screen.ExploreSettings.route) }
+            )
+        }
+        composable(Screen.ExploreResults.route) {
+            ExploreResultsScreen(
+                viewModel = appViewModel,
+                onBack = { navController.popBackStack() },
+                onPreviewOnMap = { navController.navigate(Screen.Map.route) },
+                onStartNavigation = { navController.navigate(Screen.RoutePreview.route) }
+            )
+        }
+        composable(Screen.ExploreSettings.route) {
+            ExploreSettingsScreen(
+                viewModel = appViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(Screen.RoutePreview.route) {

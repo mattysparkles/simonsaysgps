@@ -15,6 +15,11 @@ import com.simonsaysgps.domain.model.PlaceResult
 import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.SettingsModel
+import com.simonsaysgps.domain.model.explore.ExploreCategory
+import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
+import com.simonsaysgps.domain.model.explore.ExploreQuery
+import com.simonsaysgps.domain.model.explore.ExploreResult
+import com.simonsaysgps.domain.model.explore.ExploreSettings
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
@@ -22,6 +27,7 @@ import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.VoicePromptManager
+import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -46,7 +52,8 @@ class AppViewModel @Inject constructor(
     private val simonSaysEngine: SimonSaysEngine,
     private val voicePromptManager: VoicePromptManager,
     private val navigationForegroundServiceController: NavigationForegroundServiceController,
-    private val navigationSessionOrchestrator: NavigationSessionOrchestrator
+    private val navigationSessionOrchestrator: NavigationSessionOrchestrator,
+    private val exploreOrchestrator: ExploreOrchestrator
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -60,6 +67,7 @@ class AppViewModel @Inject constructor(
     private var locationJob: Job? = null
     private var routeDestination: Coordinate? = null
     private var searchJob: Job? = null
+    private var exploreJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -78,7 +86,13 @@ class AppViewModel @Inject constructor(
 
         viewModelScope.launch {
             settings.collect { updated ->
-                _uiState.value = _uiState.value.copy(settings = updated, isLoading = false)
+                _uiState.value = _uiState.value.copy(
+                    settings = updated,
+                    isLoading = false,
+                    explore = _uiState.value.explore.copy(
+                        walkthroughVisible = !updated.exploreSettings.walkthroughSeen
+                    )
+                )
                 if (_uiState.value.hasLocationPermission) startLocationUpdates()
             }
         }
@@ -144,10 +158,91 @@ class AppViewModel @Inject constructor(
         searchJob = viewModelScope.launch { performSearch(query) }
     }
 
-    fun selectPlace(place: PlaceResult) {
-        _uiState.value = _uiState.value.copy(selectedPlace = place)
-        viewModelScope.launch {
-            recentDestinationRepository.save(place)
+    fun selectPlace(place: PlaceResult) = selectPlaceInternal(place, saveRecent = true)
+
+    fun previewExploreResult(result: ExploreResult) {
+        selectPlaceInternal(result.toPlaceResult(), saveRecent = false)
+        _uiState.value = _uiState.value.copy(
+            explore = _uiState.value.explore.copy(actionMessage = "Preview ready on the map. Open route preview to navigate there.")
+        )
+    }
+
+    fun saveExploreResult(result: ExploreResult) {
+        selectPlaceInternal(result.toPlaceResult(), saveRecent = true)
+        _uiState.value = _uiState.value.copy(
+            explore = _uiState.value.explore.copy(actionMessage = "Saved ${result.candidate.name} to recent destinations.")
+        )
+    }
+
+    fun noteExploreAction(message: String) {
+        _uiState.value = _uiState.value.copy(explore = _uiState.value.explore.copy(actionMessage = message))
+    }
+
+    fun clearExploreActionMessage() {
+        _uiState.value = _uiState.value.copy(explore = _uiState.value.explore.copy(actionMessage = null))
+    }
+
+    fun loadExplore(category: ExploreCategory) {
+        val location = _uiState.value.currentLocation?.coordinate
+        if (location == null) {
+            _uiState.value = _uiState.value.copy(
+                explore = _uiState.value.explore.copy(
+                    selectedCategory = category,
+                    loading = false,
+                    errorMessage = "Explore needs a current location before it can suggest nearby places.",
+                    results = emptyList()
+                )
+            )
+            return
+        }
+
+        exploreJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            explore = _uiState.value.explore.copy(
+                selectedCategory = category,
+                loading = true,
+                errorMessage = null,
+                infoMessage = category.helperText,
+                actionMessage = null
+            )
+        )
+        exploreJob = viewModelScope.launch {
+            runCatching {
+                exploreOrchestrator.explore(
+                    ExploreQuery(
+                        category = category,
+                        userLocation = location,
+                        activeRoute = _uiState.value.routePreview.takeIf { _uiState.value.navigationState.navigationActive },
+                        settings = settings.value.exploreSettings
+                    )
+                )
+            }.onSuccess { response ->
+                _uiState.value = _uiState.value.copy(
+                    explore = _uiState.value.explore.copy(
+                        selectedCategory = category,
+                        loading = false,
+                        results = response.results,
+                        providerStatuses = response.providerStatuses,
+                        autoPicked = response.autoPicked,
+                        errorMessage = null,
+                        infoMessage = when {
+                            response.results.isEmpty() -> "No strong matches yet. Try widening the radius or loosening filters in Explore settings."
+                            response.autoPicked -> "Auto-pick mode is on, so Simon picked the single strongest suggestion for you."
+                            else -> "Showing ${response.results.size} ranked suggestions from ${response.totalCandidatesConsidered} candidates."
+                        }
+                    )
+                )
+            }.onFailure { error ->
+                _uiState.value = _uiState.value.copy(
+                    explore = _uiState.value.explore.copy(
+                        selectedCategory = category,
+                        loading = false,
+                        results = emptyList(),
+                        providerStatuses = emptyList(),
+                        errorMessage = "Explore could not rank suggestions right now: ${error.message ?: "unknown error"}."
+                    )
+                )
+            }
         }
     }
 
@@ -218,6 +313,21 @@ class AppViewModel @Inject constructor(
 
     fun updateSettings(transform: (SettingsModel) -> SettingsModel) {
         viewModelScope.launch { settingsRepository.update(transform) }
+    }
+
+    fun updateExploreSettings(transform: (ExploreSettings) -> ExploreSettings) {
+        updateSettings { current -> current.copy(exploreSettings = transform(current.exploreSettings)) }
+    }
+
+    fun dismissExploreWalkthrough() {
+        updateExploreSettings { it.copy(walkthroughSeen = true) }
+        _uiState.value = _uiState.value.copy(explore = _uiState.value.explore.copy(walkthroughVisible = false))
+    }
+
+    fun saveCurrentLocationAsExploreHome(label: String = "Saved Home") {
+        val location = _uiState.value.currentLocation?.coordinate ?: return
+        updateExploreSettings { current -> current.copy(homeLabel = label, homeCoordinate = location) }
+        noteExploreAction("Saved your current location as Explore home.")
     }
 
     private suspend fun performSearch(query: String) {
@@ -343,6 +453,20 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun selectPlaceInternal(place: PlaceResult, saveRecent: Boolean) {
+        _uiState.value = _uiState.value.copy(selectedPlace = place)
+        if (saveRecent) {
+            viewModelScope.launch { recentDestinationRepository.save(place) }
+        }
+    }
+
+    private fun ExploreResult.toPlaceResult() = PlaceResult(
+        id = candidate.id,
+        name = candidate.name,
+        fullAddress = candidate.address,
+        coordinate = candidate.coordinate
+    )
+
     private fun searchMessageFor(source: FetchSource, fallbackFailure: NetworkFailure?): String? {
         return when {
             source == FetchSource.CACHE && fallbackFailure != null -> "Showing cached search results because ${networkReasonLabel(fallbackFailure)}."
@@ -387,6 +511,18 @@ class AppViewModel @Inject constructor(
     }
 }
 
+data class ExploreUiState(
+    val selectedCategory: ExploreCategory? = null,
+    val loading: Boolean = false,
+    val results: List<ExploreResult> = emptyList(),
+    val providerStatuses: List<ExploreProviderStatus> = emptyList(),
+    val infoMessage: String? = null,
+    val errorMessage: String? = null,
+    val actionMessage: String? = null,
+    val autoPicked: Boolean = false,
+    val walkthroughVisible: Boolean = true
+)
+
 data class AppUiState(
     val isLoading: Boolean = true,
     val hasLocationPermission: Boolean = false,
@@ -405,7 +541,8 @@ data class AppUiState(
     val routeError: String? = null,
     val routeInfo: String? = null,
     val lastPrompt: String? = null,
-    val settings: SettingsModel = SettingsModel()
+    val settings: SettingsModel = SettingsModel(),
+    val explore: ExploreUiState = ExploreUiState()
 )
 
 enum class SearchStatus {
