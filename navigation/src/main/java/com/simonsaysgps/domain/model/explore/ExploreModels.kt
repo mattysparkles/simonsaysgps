@@ -46,6 +46,9 @@ data class ExploreSettings(
     val includeThirdPartyReviewSummariesWhenAvailable: Boolean = true,
     val homeLabel: String = "",
     val homeCoordinate: Coordinate? = null,
+    val closeToHomeRadiusMiles: Int = 8,
+    val visitHistoryEnabled: Boolean = true,
+    val visitHistoryRetentionDays: Int = 180,
     val surpriseMeWeight: Float = 0.2f,
     val kidFriendlyOnly: Boolean = false,
     val quietPreferenceStrictness: QuietPreferenceStrictness = QuietPreferenceStrictness.BALANCED,
@@ -176,6 +179,8 @@ data class ExploreResult(
     val confidence: Float,
     val distanceMeters: Double,
     val offRouteDistanceMeters: Double? = null,
+    val estimatedDetourMinutes: Int? = null,
+    val homeDistanceMeters: Double? = null,
     val reasons: List<ExploreReason>,
     val debugBreakdown: Map<String, Double>
 ) {

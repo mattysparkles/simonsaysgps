@@ -11,6 +11,7 @@ import com.simonsaysgps.data.repository.DataStoreSearchCacheStore
 import com.simonsaysgps.data.repository.GraphHopperRoutingRepository
 import com.simonsaysgps.data.repository.RetryOnFailureInterceptor
 import com.simonsaysgps.data.repository.DataStoreSettingsRepository
+import com.simonsaysgps.data.repository.DataStoreVisitHistoryRepository
 import com.simonsaysgps.data.repository.NominatimGeocodingRepository
 import com.simonsaysgps.data.repository.OsrmRoutingRepository
 import com.simonsaysgps.data.repository.RoutingProviderConfiguration
@@ -21,6 +22,7 @@ import com.simonsaysgps.domain.repository.ProviderRoutingRepository
 import com.simonsaysgps.domain.repository.NavigationSessionRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RouteCacheStore
+import com.simonsaysgps.domain.repository.VisitHistoryRepository
 import com.simonsaysgps.domain.repository.SearchCacheStore
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
@@ -179,6 +181,9 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindRouteCacheStore(impl: DataStoreRouteCacheStore): RouteCacheStore
+
+    @Binds
+    abstract fun bindVisitHistoryRepository(impl: DataStoreVisitHistoryRepository): VisitHistoryRepository
 
     @Binds
     abstract fun bindVoicePromptManager(impl: AndroidVoicePromptManager): VoicePromptManager

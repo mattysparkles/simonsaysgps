@@ -27,6 +27,9 @@ class ExploreSettingsDefaultsAndOrchestratorTest {
         assertThat(settings.useEventDataWhenAvailable).isTrue()
         assertThat(settings.useInternalReviewsFirst).isTrue()
         assertThat(settings.includeThirdPartyReviewSummariesWhenAvailable).isTrue()
+        assertThat(settings.closeToHomeRadiusMiles).isEqualTo(8)
+        assertThat(settings.visitHistoryEnabled).isTrue()
+        assertThat(settings.visitHistoryRetentionDays).isEqualTo(180)
         assertThat(settings.avoidAlcoholFocusedVenues).isTrue()
         assertThat(settings.avoidAdultOrientedVenues).isTrue()
     }

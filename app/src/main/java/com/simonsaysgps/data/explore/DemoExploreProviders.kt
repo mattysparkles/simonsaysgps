@@ -15,7 +15,7 @@ import com.simonsaysgps.domain.model.explore.ExploreProviderLink
 import com.simonsaysgps.domain.model.explore.ExploreQuery
 import com.simonsaysgps.domain.model.explore.ExploreReviewSourceSummary
 import com.simonsaysgps.domain.model.explore.ExploreSourceAttribution
-import com.simonsaysgps.domain.repository.RecentDestinationRepository
+import com.simonsaysgps.domain.repository.VisitHistoryRepository
 import com.simonsaysgps.domain.repository.explore.EventProvider
 import com.simonsaysgps.domain.repository.explore.PlaceDetailsProvider
 import com.simonsaysgps.domain.repository.explore.PlaceDiscoveryProvider
@@ -334,27 +334,43 @@ class CuratedPromotionSignalProvider @Inject constructor() : PromotionSignalProv
 
 @Singleton
 class RecentDestinationVisitHistoryProvider @Inject constructor(
-    private val recentDestinationRepository: RecentDestinationRepository
+    private val visitHistoryRepository: VisitHistoryRepository
 ) : UserVisitHistoryProvider {
     override suspend fun enrichPlaces(candidates: List<ExploreCandidate>): Map<String, ExploreCandidate> {
-        val recent = recentDestinationRepository.recentDestinations.first()
-        val recentByName = recent.associateBy { normalize(it.name) }
+        val visits = visitHistoryRepository.visitHistory.first()
         return candidates.mapNotNull { candidate ->
-            val matched = recentByName[normalize(candidate.name)] ?: return@mapNotNull null
+            val matched = visits
+                .map { visit -> visit to visitMatchConfidence(candidate, visit.name, visit.address, visit.coordinate.latitude, visit.coordinate.longitude) }
+                .filter { (_, confidence) -> confidence >= 0.7f }
+                .maxByOrNull { it.second }
+                ?: return@mapNotNull null
+            val (visit, confidence) = matched
             candidate.id to candidate.copy(
-                visitedBefore = true,
-                lastVisitedEpochMillis = System.currentTimeMillis() - 24 * 60 * 60 * 1000,
-                whyChosenHints = candidate.whyChosenHints + "Matched against your recent destinations.",
+                visitedBefore = confidence >= 0.88f,
+                lastVisitedEpochMillis = visit.visitedAtEpochMillis,
+                whyChosenHints = candidate.whyChosenHints + if (confidence >= 0.88f) "Matched against your first-party visit history." else "Possibly matched against your first-party visit history.",
                 confidenceSignals = candidate.confidenceSignals + ExploreConfidenceSignal(
-                    label = "visited-before",
-                    confidence = 0.98f,
-                    inferred = false,
-                    detail = "This place matches a recent destination saved in the app.",
-                    source = ExploreSourceAttribution("recent-destinations", "Recent destinations", verified = true)
+                    label = if (confidence >= 0.88f) "visited-before" else "possible-visit-match",
+                    confidence = confidence,
+                    inferred = confidence < 0.88f,
+                    detail = if (confidence >= 0.88f) "This place closely matches a visit saved by Simon Says GPS." else "This place may match a past visit, so novelty is treated carefully.",
+                    source = ExploreSourceAttribution("visit-history", "Visit history", verified = confidence >= 0.88f)
                 )
             )
         }.toMap()
     }
+}
+
+private fun visitMatchConfidence(candidate: ExploreCandidate, visitName: String, visitAddress: String, visitLatitude: Double, visitLongitude: Double): Float {
+    val nameScore = if (normalize(candidate.name) == normalize(visitName)) 0.62f else 0.0f
+    val addressScore = if (normalize(candidate.address).contains(normalize(visitAddress)) || normalize(visitAddress).contains(normalize(candidate.address))) 0.16f else 0.0f
+    val distanceScore = when (val meters = com.simonsaysgps.domain.util.GeoUtils.distanceMeters(candidate.coordinate, com.simonsaysgps.domain.model.Coordinate(visitLatitude, visitLongitude))) {
+        in 0.0..75.0 -> 0.3f
+        in 75.0..150.0 -> 0.2f
+        in 150.0..300.0 -> 0.1f
+        else -> 0.0f
+    }
+    return (nameScore + addressScore + distanceScore).coerceIn(0.0f, 1.0f)
 }
 
 private fun normalize(value: String): String = value.lowercase().replace("[^a-z0-9]".toRegex(), "")

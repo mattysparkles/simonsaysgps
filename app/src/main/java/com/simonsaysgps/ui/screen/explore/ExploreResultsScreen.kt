@@ -170,7 +170,14 @@ private fun ExploreResultCard(
                     else if (candidate.openNow == false) "Currently closed"
                     else "Hours unknown"
             )
-            Text(result.offRouteDistanceMeters?.let { "${formatMiles(it)} miles off route" } ?: "${formatMiles(result.distanceMeters)} miles away")
+            Text(
+                result.offRouteDistanceMeters?.let { offRoute ->
+                    buildString {
+                        append("${formatMiles(offRoute)} miles off route")
+                        result.estimatedDetourMinutes?.let { append(" · about ${it} min detour") }
+                    }
+                } ?: "${formatMiles(result.distanceMeters)} miles away"
+            )
             reviewSummary?.let {
                 Text(
                     buildString {
@@ -182,6 +189,9 @@ private fun ExploreResultCard(
             } ?: Text("Ratings unavailable")
             candidate.primaryPromotion?.let {
                 Text("${if (it.inferred) "Possible sale" else "Sale"}: ${it.summary} (${(it.confidence * 100).toInt()}% confidence)")
+            }
+            if (!candidate.visitedBefore) {
+                Text("Not visited yet", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
             Text("Why this was chosen: ${result.primaryWhyChosen}", style = MaterialTheme.typography.bodyMedium)
             if (sourcesText.isNotBlank()) {

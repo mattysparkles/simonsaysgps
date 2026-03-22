@@ -11,16 +11,19 @@ import com.simonsaysgps.domain.model.explore.ExploreResult
 import com.simonsaysgps.domain.model.explore.QuietPreferenceStrictness
 import com.simonsaysgps.domain.util.GeoUtils
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 class ExploreRankingEngine {
     fun rank(query: ExploreQuery, candidates: List<ExploreCandidate>): List<ExploreResult> {
         return candidates
-            .filter { passesHardFilters(query, it) }
-            .map { candidate ->
+            .mapNotNull { candidate ->
                 val distanceMeters = GeoUtils.distanceMeters(query.userLocation, candidate.coordinate)
                 val offRouteDistanceMeters = query.activeRoute?.geometry?.takeIf { it.size >= 2 }?.let {
                     GeoUtils.closestDistanceToPolylineMeters(candidate.coordinate, it)
                 }
+                val estimatedDetourMinutes = estimateDetourMinutes(query, offRouteDistanceMeters)
+                val homeDistanceMeters = query.settings.homeCoordinate?.let { GeoUtils.distanceMeters(it, candidate.coordinate) }
+                if (!passesHardFilters(query, candidate, offRouteDistanceMeters, estimatedDetourMinutes, homeDistanceMeters)) return@mapNotNull null
                 val breakdown = linkedMapOf<String, Double>()
                 breakdown["distance"] = distanceScore(distanceMeters, query)
                 breakdown["openNow"] = openNowScore(candidate, query)
@@ -28,28 +31,30 @@ class ExploreRankingEngine {
                 breakdown["category"] = ExploreCategoryHeuristics.relevance(query.category, candidate)
                 breakdown["eventTiming"] = eventTimingScore(candidate, query)
                 breakdown["novelty"] = noveltyScore(candidate)
-                breakdown["routeAlignment"] = routeAlignmentScore(query, offRouteDistanceMeters)
-                breakdown["homeProximity"] = homeProximityScore(query, candidate)
+                breakdown["routeAlignment"] = routeAlignmentScore(query, offRouteDistanceMeters, estimatedDetourMinutes)
+                breakdown["homeProximity"] = homeProximityScore(query, homeDistanceMeters)
                 breakdown["surprise"] = surpriseScore(candidate, query)
                 breakdown["quiet"] = quietPreferenceScore(candidate, query)
                 breakdown["accessibility"] = accessibilityScore(candidate, query)
                 breakdown["promotions"] = promotionScore(candidate)
                 breakdown["ratingConfidence"] = ratingConfidenceScore(candidate)
+                breakdown["tieBreaker"] = tieBreakerScore(candidate)
 
                 val weightedScore =
-                    breakdown["distance"]!! * 0.15 +
-                        breakdown["openNow"]!! * 0.12 +
-                        breakdown["reviews"]!! * 0.16 +
+                    breakdown["distance"]!! * 0.14 +
+                        breakdown["openNow"]!! * 0.11 +
+                        breakdown["reviews"]!! * 0.15 +
                         breakdown["category"]!! * 0.18 +
-                        breakdown["eventTiming"]!! * 0.1 +
-                        breakdown["novelty"]!! * 0.06 +
-                        breakdown["routeAlignment"]!! * 0.07 +
-                        breakdown["homeProximity"]!! * 0.04 +
+                        breakdown["eventTiming"]!! * 0.09 +
+                        breakdown["novelty"]!! * 0.09 +
+                        breakdown["routeAlignment"]!! * 0.08 +
+                        breakdown["homeProximity"]!! * 0.06 +
                         breakdown["surprise"]!! * 0.02 +
                         breakdown["quiet"]!! * 0.03 +
                         breakdown["accessibility"]!! * 0.03 +
-                        breakdown["promotions"]!! * 0.02 +
-                        breakdown["ratingConfidence"]!! * 0.02
+                        breakdown["promotions"]!! * 0.01 +
+                        breakdown["ratingConfidence"]!! * 0.01 +
+                        breakdown["tieBreaker"]!! * 0.01
 
                 ExploreResult(
                     candidate = candidate,
@@ -57,14 +62,22 @@ class ExploreRankingEngine {
                     confidence = confidence(candidate, breakdown),
                     distanceMeters = distanceMeters,
                     offRouteDistanceMeters = offRouteDistanceMeters,
-                    reasons = explain(query.category, candidate, breakdown, distanceMeters, offRouteDistanceMeters),
+                    estimatedDetourMinutes = estimatedDetourMinutes,
+                    homeDistanceMeters = homeDistanceMeters,
+                    reasons = explain(query.category, candidate, breakdown, distanceMeters, offRouteDistanceMeters, estimatedDetourMinutes, homeDistanceMeters),
                     debugBreakdown = breakdown
                 )
             }
             .sortedByDescending { it.score }
     }
 
-    private fun passesHardFilters(query: ExploreQuery, candidate: ExploreCandidate): Boolean {
+    private fun passesHardFilters(
+        query: ExploreQuery,
+        candidate: ExploreCandidate,
+        offRouteDistanceMeters: Double?,
+        estimatedDetourMinutes: Int?,
+        homeDistanceMeters: Double?
+    ): Boolean {
         val settings = query.settings
         if (settings.requireOpenNowByDefault && query.category != ExploreCategory.NEW && candidate.primaryEvent == null && candidate.openNow == false) return false
         if (query.category == ExploreCategory.NEVER_BEEN && candidate.visitedBefore) return false
@@ -72,6 +85,16 @@ class ExploreRankingEngine {
         if (settings.avoidAlcoholFocusedVenues && candidate.alcoholFocused) return false
         if (settings.avoidAdultOrientedVenues && candidate.adultOriented) return false
         if (settings.accessiblePlacesPreference == AccessiblePlacesPreference.ACCESSIBLE_ONLY && candidate.accessible == false) return false
+        if (query.category == ExploreCategory.ON_MY_WAY && settings.allowRouteDetoursWhileNavigating) {
+            val maxDetourMeters = settings.maxDetourDistanceMiles * METERS_PER_MILE
+            if (query.activeRoute == null) return false
+            if (offRouteDistanceMeters == null || offRouteDistanceMeters > maxDetourMeters) return false
+            if (estimatedDetourMinutes != null && estimatedDetourMinutes > settings.maxDetourMinutes) return false
+        }
+        if (query.category == ExploreCategory.CLOSE_TO_HOME && settings.homeCoordinate != null) {
+            val maxHomeMeters = settings.closeToHomeRadiusMiles * METERS_PER_MILE
+            if (homeDistanceMeters != null && homeDistanceMeters > maxHomeMeters) return false
+        }
         return true
     }
 
@@ -126,27 +149,32 @@ class ExploreRankingEngine {
 
     private fun noveltyScore(candidate: ExploreCandidate): Double {
         val newConfidence = candidate.confidenceSignals.firstOrNull { it.label.equals("new", ignoreCase = true) }?.confidence?.toDouble() ?: 0.0
+        val possibleVisitPenalty = candidate.confidenceSignals.firstOrNull { it.label.equals("possible-visit-match", ignoreCase = true) }?.confidence?.toDouble() ?: 0.0
         return when {
-            candidate.visitedBefore -> 0.15
-            candidate.recentlyOpenedOrTrending -> max(1.0, newConfidence)
+            candidate.visitedBefore -> 0.05
+            possibleVisitPenalty > 0.0 -> (0.5 - possibleVisitPenalty * 0.2).coerceIn(0.2, 0.6)
+            candidate.recentlyOpenedOrTrending -> max(0.9, newConfidence)
             newConfidence > 0.0 -> max(0.65, newConfidence)
-            else -> 0.75
+            else -> 0.82
         }.coerceIn(0.0, 1.0)
     }
 
-    private fun routeAlignmentScore(query: ExploreQuery, offRouteDistanceMeters: Double?): Double {
+    private fun routeAlignmentScore(query: ExploreQuery, offRouteDistanceMeters: Double?, estimatedDetourMinutes: Int?): Double {
         if (query.category != ExploreCategory.ON_MY_WAY) return 0.4
         if (query.activeRoute == null || !query.settings.allowRouteDetoursWhileNavigating) return 0.1
         val maxDetourMeters = query.settings.maxDetourDistanceMiles * METERS_PER_MILE
-        val distance = offRouteDistanceMeters ?: return 0.2
-        return (1.0 - (distance / max(maxDetourMeters, 1.0))).coerceIn(0.0, 1.0)
+        val distance = offRouteDistanceMeters ?: return 0.0
+        val distanceComponent = (1.0 - (distance / max(maxDetourMeters, 1.0))).coerceIn(0.0, 1.0)
+        val minuteComponent = estimatedDetourMinutes?.let { 1.0 - (it / max(query.settings.maxDetourMinutes.toDouble(), 1.0)) } ?: 0.5
+        return ((distanceComponent * 0.7) + (minuteComponent.coerceIn(0.0, 1.0) * 0.3)).coerceIn(0.0, 1.0)
     }
 
-    private fun homeProximityScore(query: ExploreQuery, candidate: ExploreCandidate): Double {
+    private fun homeProximityScore(query: ExploreQuery, homeDistanceMeters: Double?): Double {
         if (query.category != ExploreCategory.CLOSE_TO_HOME) return 0.35
         val home = query.settings.homeCoordinate ?: return 0.1
-        val homeDistance = GeoUtils.distanceMeters(home, candidate.coordinate)
-        return (1.0 - (homeDistance / (query.settings.defaultRadiusMiles * METERS_PER_MILE))).coerceIn(0.0, 1.0)
+        val homeDistance = homeDistanceMeters ?: return 0.0
+        val radiusMeters = query.settings.closeToHomeRadiusMiles * METERS_PER_MILE
+        return (1.0 - (homeDistance / max(radiusMeters.toDouble(), 1.0))).coerceIn(0.0, 1.0)
     }
 
     private fun surpriseScore(candidate: ExploreCandidate, query: ExploreQuery): Double {
@@ -173,6 +201,14 @@ class ExploreRankingEngine {
         AccessiblePlacesPreference.ACCESSIBLE_ONLY -> if (candidate.accessible == true) 1.0 else 0.0
     }
 
+    private fun tieBreakerScore(candidate: ExploreCandidate): Double {
+        return when {
+            !candidate.visitedBefore -> 0.85
+            candidate.lastVisitedEpochMillis == null -> 0.3
+            else -> 0.2
+        }
+    }
+
     private fun confidence(candidate: ExploreCandidate, breakdown: Map<String, Double>): Float {
         val signalCount = listOf(
             candidate.openNow,
@@ -195,7 +231,9 @@ class ExploreRankingEngine {
         candidate: ExploreCandidate,
         breakdown: Map<String, Double>,
         distanceMeters: Double,
-        offRouteDistanceMeters: Double?
+        offRouteDistanceMeters: Double?,
+        estimatedDetourMinutes: Int?,
+        homeDistanceMeters: Double?
     ): List<ExploreReason> {
         val reasons = mutableListOf<ExploreReason>()
         reasons += ExploreReason(
@@ -204,6 +242,14 @@ class ExploreRankingEngine {
             contribution = breakdown["category"] ?: 0.0,
             confidence = candidate.sourceConfidence
         )
+        if (!candidate.visitedBefore) {
+            reasons += ExploreReason(
+                title = "Novelty",
+                detail = "Not visited yet in your first-party history, so this stays fresh without claiming certainty beyond the app's own records.",
+                contribution = breakdown["novelty"] ?: 0.0,
+                confidence = 0.82f
+            )
+        }
         if (candidate.openNow == true) {
             reasons += ExploreReason("Open now", "Open right now, which helps this suggestion stay practical.", breakdown["openNow"] ?: 0.0, 0.9f)
         }
@@ -243,15 +289,36 @@ class ExploreRankingEngine {
         if (offRouteDistanceMeters != null) {
             reasons += ExploreReason(
                 title = "Route fit",
-                detail = "About ${distanceMiles(offRouteDistanceMeters)} miles off your active route.",
+                detail = buildString {
+                    append("About ${distanceMiles(offRouteDistanceMeters)} miles off your active route")
+                    estimatedDetourMinutes?.let { append(" for roughly $it extra minutes") }
+                    append('.')
+                },
                 contribution = breakdown["routeAlignment"] ?: 0.0,
                 confidence = 0.85f
+            )
+        }
+        if (homeDistanceMeters != null && category == ExploreCategory.CLOSE_TO_HOME) {
+            reasons += ExploreReason(
+                title = "Home area",
+                detail = "Roughly ${distanceMiles(homeDistanceMeters)} miles from your saved home anchor.",
+                contribution = breakdown["homeProximity"] ?: 0.0,
+                confidence = 0.9f
             )
         }
         candidate.whyChosenHints.forEach { hint ->
             reasons += ExploreReason("Why this was chosen", hint, 0.5, candidate.sourceConfidence)
         }
         return reasons.sortedByDescending { it.contribution }
+    }
+
+    private fun estimateDetourMinutes(query: ExploreQuery, offRouteDistanceMeters: Double?): Int? {
+        val route = query.activeRoute ?: return null
+        val offRoute = offRouteDistanceMeters ?: return null
+        if (route.totalDurationSeconds <= 0 || route.totalDistanceMeters <= 0) return null
+        val metersPerSecond = (route.totalDistanceMeters / route.totalDurationSeconds).coerceAtLeast(3.0)
+        val seconds = (offRoute * 2.0) / metersPerSecond
+        return (seconds / 60.0).coerceAtLeast(1.0).roundToInt()
     }
 
     private fun distanceMiles(distanceMeters: Double): String = "%.1f".format(distanceMeters / METERS_PER_MILE)

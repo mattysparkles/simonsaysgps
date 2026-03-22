@@ -2,12 +2,14 @@ package com.simonsaysgps.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,7 +23,11 @@ import com.simonsaysgps.domain.model.DistanceUnit
 import com.simonsaysgps.domain.model.GameMode
 import com.simonsaysgps.domain.model.PromptFrequency
 import com.simonsaysgps.domain.model.PromptPersonality
+import com.simonsaysgps.domain.model.RouteStyle
 import com.simonsaysgps.domain.model.RoutingProvider
+import com.simonsaysgps.domain.model.SettingsModel
+import com.simonsaysgps.domain.model.TransportProfile
+import com.simonsaysgps.domain.service.RoutingSupportAdvisor
 import com.simonsaysgps.ui.test.UiTestTags
 import com.simonsaysgps.ui.viewmodel.AppUiState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
@@ -39,7 +45,18 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         onGameModeSelected = { selected -> viewModel.updateSettings { current -> current.copy(gameMode = GameMode.valueOf(selected)) } },
         onPromptFrequencySelected = { selected -> viewModel.updateSettings { it.copy(promptFrequency = PromptFrequency.valueOf(selected)) } },
         onPromptPersonalitySelected = { selected -> viewModel.updateSettings { it.copy(promptPersonality = PromptPersonality.valueOf(selected)) } },
-        onDistanceUnitSelected = { selected -> viewModel.updateSettings { it.copy(distanceUnit = DistanceUnit.valueOf(selected)) } }
+        onDistanceUnitSelected = { selected -> viewModel.updateSettings { it.copy(distanceUnit = DistanceUnit.valueOf(selected)) } },
+        onTransportProfileSelected = { selected -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(transportProfile = TransportProfile.valueOf(selected))) } },
+        onPrimaryRouteStyleSelected = { selected -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(primaryRouteStyle = RouteStyle.valueOf(selected))) } },
+        onAvoidTollsChanged = { enabled -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(avoidTolls = enabled)) } },
+        onPreferScenicChanged = { enabled -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(preferScenic = enabled)) } },
+        onPreferFastestChanged = { enabled -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(preferFastest = enabled)) } },
+        onPreferLowStressChanged = { enabled -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(preferLowStress = enabled)) } },
+        onSimonChallengeModeChanged = { enabled -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(simonChallengeMode = enabled)) } },
+        onChallengeIntensityChanged = { value -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(challengeIntensity = value.toInt())) } },
+        onVehicleHeightChanged = { value -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(vehicleProfile = current.routingPreferences.vehicleProfile.copy(heightMeters = value.takeIf { it > 0f }?.toDouble()))) } },
+        onVehicleLengthChanged = { value -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(vehicleProfile = current.routingPreferences.vehicleProfile.copy(lengthMeters = value.takeIf { it > 0f }?.toDouble()))) } },
+        onVehicleWeightChanged = { value -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(vehicleProfile = current.routingPreferences.vehicleProfile.copy(weightTons = value.takeIf { it > 0f }?.toDouble()))) } }
     )
 }
 
@@ -54,61 +71,143 @@ fun SettingsScreenContent(
     onGameModeSelected: (String) -> Unit,
     onPromptFrequencySelected: (String) -> Unit,
     onPromptPersonalitySelected: (String) -> Unit,
-    onDistanceUnitSelected: (String) -> Unit
+    onDistanceUnitSelected: (String) -> Unit,
+    onTransportProfileSelected: (String) -> Unit,
+    onPrimaryRouteStyleSelected: (String) -> Unit,
+    onAvoidTollsChanged: (Boolean) -> Unit,
+    onPreferScenicChanged: (Boolean) -> Unit,
+    onPreferFastestChanged: (Boolean) -> Unit,
+    onPreferLowStressChanged: (Boolean) -> Unit,
+    onSimonChallengeModeChanged: (Boolean) -> Unit,
+    onChallengeIntensityChanged: (Float) -> Unit,
+    onVehicleHeightChanged: (Float) -> Unit,
+    onVehicleLengthChanged: (Float) -> Unit,
+    onVehicleWeightChanged: (Float) -> Unit
 ) {
     val settings = state.settings
+    val routing = settings.routingPreferences
+    val advisory = RoutingSupportAdvisor.plan(settings).advisory
     Scaffold(modifier = Modifier.testTag(UiTestTags.SETTINGS_SCREEN)) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             TextButton(onClick = onBack) { Text("Back") }
-            ToggleCard("Voice prompts", settings.voiceEnabled, onVoiceEnabledChange)
-            ToggleCard("Debug overlay", settings.debugMode, onDebugModeChange)
-            ToggleCard("Demo mode", settings.demoMode, onDemoModeChange)
+            ToggleCard("Voice prompts", settings.voiceEnabled, "Read turn prompts aloud while navigating.", onVoiceEnabledChange)
+            ToggleCard("Debug overlay", settings.debugMode, "Show extra diagnostics useful while testing providers and game logic.", onDebugModeChange)
+            ToggleCard("Demo mode", settings.demoMode, "Use the built-in demo location feed for emulator and screenshot testing.", onDemoModeChange)
             ChoiceCard(
                 title = "Routing provider",
+                helper = "Choose the backend used for route calculation. Unsupported selections still fall back honestly.",
                 options = RoutingProvider.entries.map { it.name to "${it.displayName} — ${it.description}" },
                 selected = settings.routingProvider.name,
                 onSelected = onRoutingProviderSelected
             )
             ChoiceCard(
                 title = "Game mode",
+                helper = "Controls how mischievous Simon becomes while keeping the navigation layer usable.",
                 options = listOf(GameMode.BASIC.name to "Basic", GameMode.MISCHIEF.name to "Mischief"),
                 selected = settings.gameMode.name,
                 onSelected = onGameModeSelected
             )
             ChoiceCard(
                 title = "Prompt frequency",
+                helper = "Adjust how often Simon speaks up during navigation.",
                 options = PromptFrequency.entries.map { it.name to it.name.lowercase().replaceFirstChar(Char::uppercase) },
                 selected = settings.promptFrequency.name,
                 onSelected = onPromptFrequencySelected
             )
             ChoiceCard(
                 title = "Prompt personality",
+                helper = "Switch the tone Simon uses for spoken and on-screen callouts.",
                 options = PromptPersonality.entries.map { it.name to it.displayName },
                 selected = settings.promptPersonality.name,
                 onSelected = onPromptPersonalitySelected
             )
             ChoiceCard(
                 title = "Units",
+                helper = "Choose the distance units shown in preview and active navigation.",
                 options = DistanceUnit.entries.map { it.name to it.name.lowercase().replaceFirstChar(Char::uppercase) },
                 selected = settings.distanceUnit.name,
                 onSelected = onDistanceUnitSelected
+            )
+            ChoiceCard(
+                title = "Transport profile",
+                helper = "Pick the vehicle or travel mode you want the routing layer to target.",
+                options = TransportProfile.entries.map { it.name to "${it.displayName} — ${it.helperText}" },
+                selected = routing.transportProfile.name,
+                onSelected = onTransportProfileSelected
+            )
+            ChoiceCard(
+                title = "Primary route style",
+                helper = "Choose the main route style. Additional toggles below stay bounded and never fake guaranteed provider support.",
+                options = RouteStyle.entries.map { it.name to "${it.displayName} — ${it.helperText}" },
+                selected = routing.primaryRouteStyle.name,
+                onSelected = onPrimaryRouteStyleSelected
+            )
+            ToggleCard("Avoid tolls", routing.avoidTolls, "Request toll avoidance when the provider can honor it.", onAvoidTollsChanged)
+            ToggleCard("Prefer scenic roads", routing.preferScenic, "Ask for a more scenic-feeling route without intentionally creating wasteful loops.", onPreferScenicChanged)
+            ToggleCard("Prefer fastest route", routing.preferFastest, "Keep the routing layer biased toward the fastest practical route.", onPreferFastestChanged)
+            ToggleCard("Prefer low-stress roads", routing.preferLowStress, "Use a calmer-road preference if the provider supports one.", onPreferLowStressChanged)
+            ToggleCard("Simon Challenge Mode", routing.simonChallengeMode, "Playfully ask for more turn variety while staying bounded and sane.", onSimonChallengeModeChanged)
+            SliderCard(
+                title = "Challenge intensity",
+                value = routing.challengeIntensity.toFloat(),
+                range = 1f..5f,
+                helper = "Higher values ask for slightly more route variety, but never absurd loops.",
+                label = routing.challengeIntensity.toString(),
+                onValueChange = onChallengeIntensityChanged
+            )
+            SliderCard(
+                title = "Vehicle height",
+                value = (routing.vehicleProfile.heightMeters ?: 0.0).toFloat(),
+                range = 0f..5f,
+                helper = "Set to zero if not relevant. These dimensions are saved now, but current providers do not guarantee strict restriction enforcement.",
+                label = if (routing.vehicleProfile.heightMeters != null) "${"%.1f".format(routing.vehicleProfile.heightMeters)} m" else "Not set",
+                onValueChange = onVehicleHeightChanged
+            )
+            SliderCard(
+                title = "Vehicle length",
+                value = (routing.vehicleProfile.lengthMeters ?: 0.0).toFloat(),
+                range = 0f..20f,
+                helper = "Useful for RV, truck, and trailer planning when a future provider can honor it directly.",
+                label = if (routing.vehicleProfile.lengthMeters != null) "${"%.1f".format(routing.vehicleProfile.lengthMeters)} m" else "Not set",
+                onValueChange = onVehicleLengthChanged
+            )
+            SliderCard(
+                title = "Vehicle weight",
+                value = (routing.vehicleProfile.weightTons ?: 0.0).toFloat(),
+                range = 0f..40f,
+                helper = "Useful for heavy vehicles, but still treated as an honest scaffold in this build.",
+                label = if (routing.vehicleProfile.weightTons != null) "${"%.1f".format(routing.vehicleProfile.weightTons)} tons" else "Not set",
+                onValueChange = onVehicleWeightChanged
+            )
+            MessageCard(
+                title = "Routing limitations",
+                body = buildString {
+                    append(advisory.summary)
+                    if (advisory.limitations.isNotEmpty()) {
+                        append("\n")
+                        append(advisory.limitations.joinToString(separator = "\n") { "• $it" })
+                    }
+                }
             )
         }
     }
 }
 
 @Composable
-private fun ToggleCard(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun ToggleCard(title: String, checked: Boolean, helper: String, onCheckedChange: (Boolean) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        androidx.compose.foundation.layout.Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(title)
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(title)
+                Switch(checked = checked, onCheckedChange = onCheckedChange)
+            }
+            Text(helper)
         }
     }
 }
@@ -116,6 +215,7 @@ private fun ToggleCard(title: String, checked: Boolean, onCheckedChange: (Boolea
 @Composable
 private fun ChoiceCard(
     title: String,
+    helper: String,
     options: List<Pair<String, String>>,
     selected: String,
     onSelected: (String) -> Unit
@@ -123,12 +223,42 @@ private fun ChoiceCard(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title)
+            Text(helper)
             options.forEach { (value, label) ->
-                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RadioButton(selected = selected == value, onClick = { onSelected(value) })
                     Text(label, modifier = Modifier.padding(top = 12.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SliderCard(
+    title: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    helper: String,
+    label: String,
+    onValueChange: (Float) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title)
+            Text(label)
+            Text(helper)
+            Slider(value = value, onValueChange = onValueChange, valueRange = range)
+        }
+    }
+}
+
+@Composable
+private fun MessageCard(title: String, body: String) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title)
+            Text(body)
         }
     }
 }
