@@ -3,6 +3,7 @@ package com.simonsaysgps.domain.engine
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.ManeuverAuthorization
 import com.simonsaysgps.domain.model.NavigationSessionState
+import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.RerouteReason
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
@@ -31,7 +32,8 @@ class SimonSaysEngine @Inject constructor(
         previousState: NavigationSessionState,
         previousLocation: LocationSample?,
         currentLocation: LocationSample,
-        distanceUnit: com.simonsaysgps.domain.model.DistanceUnit
+        distanceUnit: com.simonsaysgps.domain.model.DistanceUnit,
+        promptPersonality: PromptPersonality
     ): NavigationSessionState {
         val route = previousState.route ?: return previousState
         val currentIndex = previousState.activeManeuverIndex.coerceIn(0, route.maneuvers.lastIndex)
@@ -40,7 +42,7 @@ class SimonSaysEngine @Inject constructor(
             return previousState.copy(
                 currentLocation = currentLocation,
                 navigationActive = false,
-                spokenPrompt = promptFactory.approvalPrompt()
+                spokenPrompt = promptFactory.approvalPrompt(promptPersonality)
             )
         }
 
@@ -59,12 +61,12 @@ class SimonSaysEngine @Inject constructor(
         val nextIndex = if (resolution is SimonTurnResolution.Authorized) currentIndex + 1 else currentIndex
         val nextManeuver = route.maneuvers.getOrNull(nextIndex)
         val prompt = when {
-            resolution is SimonTurnResolution.Authorized && nextManeuver == null -> promptFactory.approvalPrompt()
-            resolution is SimonTurnResolution.Unauthorized -> promptFactory.reroutePrompt(RerouteReason.UNAUTHORIZED_TURN)
-            resolution is SimonTurnResolution.Missed -> promptFactory.reroutePrompt(RerouteReason.MISSED_REQUIRED_TURN)
-            resolution is SimonTurnResolution.OffRoute -> promptFactory.reroutePrompt(RerouteReason.OFF_ROUTE)
-            distanceToNext <= 25 -> promptFactory.immediatePrompt(maneuver)
-            distanceToNext <= 150 -> promptFactory.upcomingPrompt(maneuver, distanceUnit, distanceToNext)
+            resolution is SimonTurnResolution.Authorized && nextManeuver == null -> promptFactory.approvalPrompt(promptPersonality)
+            resolution is SimonTurnResolution.Unauthorized -> promptFactory.reroutePrompt(RerouteReason.UNAUTHORIZED_TURN, promptPersonality)
+            resolution is SimonTurnResolution.Missed -> promptFactory.reroutePrompt(RerouteReason.MISSED_REQUIRED_TURN, promptPersonality)
+            resolution is SimonTurnResolution.OffRoute -> promptFactory.reroutePrompt(RerouteReason.OFF_ROUTE, promptPersonality)
+            distanceToNext <= 25 -> promptFactory.immediatePrompt(maneuver, promptPersonality)
+            distanceToNext <= 150 -> promptFactory.upcomingPrompt(maneuver, distanceUnit, distanceToNext, promptPersonality)
             else -> null
         }
         val rerouteReason = when (resolution) {
