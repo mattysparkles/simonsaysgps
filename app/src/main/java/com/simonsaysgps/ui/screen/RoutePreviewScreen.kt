@@ -82,6 +82,11 @@ fun RoutePreviewScreenContent(
             state.routeInfo?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
+            Text(
+                text = "Lane-by-lane hints only appear when the active routing provider actually supplies them.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             val advisory = RoutingSupportAdvisor.plan(state.settings).advisory
             if (advisory.limitations.isNotEmpty()) {
                 Text(

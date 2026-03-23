@@ -3,6 +3,7 @@ package com.simonsaysgps.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.simonsaysgps.config.ReleaseSurface
 import com.simonsaysgps.data.location.DemoLocationRepository
 import com.simonsaysgps.data.location.FusedLocationRepository
 import com.simonsaysgps.domain.engine.SimonSaysEngine
@@ -91,6 +92,7 @@ class AppViewModel @Inject constructor(
     private val reviewDraftRepository: ReviewDraftRepository,
     private val voiceAssistantManager: VoiceAssistantManager
 ) : ViewModel() {
+    private val releaseSurface = ReleaseSurface.fromBuildConfig()
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
@@ -126,11 +128,16 @@ class AppViewModel @Inject constructor(
 
         viewModelScope.launch {
             settings.collect { updated ->
+                val sanitized = releaseSurface.sanitize(updated)
+                if (sanitized != updated) {
+                    settingsRepository.update { sanitized }
+                    return@collect
+                }
                 _uiState.value = _uiState.value.copy(
-                    settings = updated,
+                    settings = sanitized,
                     isLoading = false,
                     explore = _uiState.value.explore.copy(
-                        walkthroughVisible = !updated.exploreSettings.walkthroughSeen
+                        walkthroughVisible = !sanitized.exploreSettings.walkthroughSeen
                     )
                 )
                 if (_uiState.value.hasLocationPermission) startLocationUpdates()
@@ -590,6 +597,10 @@ class AppViewModel @Inject constructor(
     fun dismissExploreWalkthrough() {
         updateExploreSettings { it.copy(walkthroughSeen = true) }
         _uiState.value = _uiState.value.copy(explore = _uiState.value.explore.copy(walkthroughVisible = false))
+    }
+
+    fun dismissOnboarding() {
+        updateSettings { current -> current.copy(onboardingSeen = true) }
     }
 
     fun saveCurrentLocationAsExploreHome(label: String = "Saved Home") {

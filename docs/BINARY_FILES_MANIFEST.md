@@ -18,3 +18,5 @@ This repository intentionally excludes tracked binary artifacts from the pull re
 - No new binary files were added by the saved places / favorite persistence and reuse PR.
 
 - No new binary files were added by the voice assistant v1 persistence and native speech-recognition PR.
+
+- No new binary files were added by the release-safe gating, onboarding, and launch-polish pass.

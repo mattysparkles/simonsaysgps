@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.simonsaysgps.config.ReleaseSurface
 import com.simonsaysgps.domain.model.voice.CrowdReportType
 import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
 import com.simonsaysgps.domain.model.voice.ReviewDraftStatus
@@ -43,6 +44,7 @@ fun VoiceAssistantScreen(
         voiceConfirmationRequired = state.settings.voiceAssistantSettings.voiceConfirmationRequired,
         aiCleanupEnabled = state.settings.voiceAssistantSettings.aiCleanupOptIn,
         soundtrackEnabled = state.settings.voiceAssistantSettings.soundtrackIntegrationEnabled,
+        showSoundtrackScaffolding = ReleaseSurface.fromBuildConfig().showSoundtrackScaffolding,
         onBack = onBack,
         onRequestMicrophonePermission = requestMicrophonePermission,
         onTranscriptChanged = viewModel::updateVoiceTranscript,
@@ -67,6 +69,7 @@ fun VoiceAssistantScreenContent(
     voiceConfirmationRequired: Boolean,
     aiCleanupEnabled: Boolean,
     soundtrackEnabled: Boolean,
+    showSoundtrackScaffolding: Boolean,
     onBack: () -> Unit,
     onRequestMicrophonePermission: () -> Unit,
     onTranscriptChanged: (String) -> Unit,
@@ -106,7 +109,7 @@ fun VoiceAssistantScreenContent(
                     Text("Voice assistant enabled: $voiceEnabled")
                     Text("Voice confirmation required: $voiceConfirmationRequired")
                     Text("AI cleanup opt-in: $aiCleanupEnabled")
-                    Text("Soundtrack integrations enabled: $soundtrackEnabled")
+                    Text(if (showSoundtrackScaffolding) "Soundtrack integrations enabled: $soundtrackEnabled" else "Music-provider handoff is intentionally hidden in this release build.")
                 }
             }
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -204,9 +207,17 @@ fun VoiceAssistantScreenContent(
             }
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Soundtrack scaffolding")
-                    Text("Ask for vibes like 'make me a spooky road trip playlist' or 'make me a beach playlist'. Simon saves the request and explains that live music-provider handoff is still future work.")
-                    RowToggle(label = "Ready for future provider deep links", checked = soundtrackEnabled)
+                    Text(if (showSoundtrackScaffolding) "Soundtrack scaffolding" else "What voice can do today")
+                    Text(
+                        if (showSoundtrackScaffolding) {
+                            "Ask for vibes like 'make me a spooky road trip playlist' or 'make me a beach playlist'. Simon saves the request and explains that live music-provider handoff is still future work."
+                        } else {
+                            "This release keeps voice focused on navigation search, passenger reports, and local review drafting. Music-provider handoff is postponed until it feels deliberate instead of half-wired."
+                        }
+                    )
+                    if (showSoundtrackScaffolding) {
+                        DisabledToggle(label = "Ready for future provider deep links", checked = soundtrackEnabled)
+                    }
                 }
             }
         }
@@ -214,7 +225,7 @@ fun VoiceAssistantScreenContent(
 }
 
 @Composable
-private fun RowToggle(label: String, checked: Boolean) {
+private fun DisabledToggle(label: String, checked: Boolean) {
     Card(modifier = Modifier.fillMaxWidth()) {
         androidx.compose.foundation.layout.Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),

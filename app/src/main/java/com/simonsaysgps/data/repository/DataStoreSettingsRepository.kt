@@ -51,6 +51,7 @@ class DataStoreSettingsRepository @Inject constructor(
             prefs[ROUTING_PROVIDER] = updated.routingProvider.name
             prefs[DEBUG_MODE] = updated.debugMode
             prefs[DEMO_MODE] = updated.demoMode
+            prefs[ONBOARDING_SEEN] = updated.onboardingSeen
             prefs[TRANSPORT_PROFILE] = updated.routingPreferences.transportProfile.name
             prefs[PRIMARY_ROUTE_STYLE] = updated.routingPreferences.primaryRouteStyle.name
             prefs[AVOID_TOLLS] = updated.routingPreferences.avoidTolls
@@ -107,6 +108,7 @@ class DataStoreSettingsRepository @Inject constructor(
         routingProvider = RoutingProvider.fromNameOrDefault(this[ROUTING_PROVIDER]),
         debugMode = this[DEBUG_MODE] ?: false,
         demoMode = this[DEMO_MODE] ?: true,
+        onboardingSeen = this[ONBOARDING_SEEN] ?: false,
         routingPreferences = RoutingPreferences(
             transportProfile = this[TRANSPORT_PROFILE]?.let(TransportProfile::valueOf) ?: TransportProfile.CAR,
             primaryRouteStyle = this[PRIMARY_ROUTE_STYLE]?.let(RouteStyle::valueOf) ?: RouteStyle.FASTEST,
@@ -178,6 +180,7 @@ class DataStoreSettingsRepository @Inject constructor(
         val ROUTING_PROVIDER = stringPreferencesKey("routing_provider")
         val DEBUG_MODE = booleanPreferencesKey("debug_mode")
         val DEMO_MODE = booleanPreferencesKey("demo_mode")
+        val ONBOARDING_SEEN = booleanPreferencesKey("onboarding_seen")
         val TRANSPORT_PROFILE = stringPreferencesKey("transport_profile")
         val PRIMARY_ROUTE_STYLE = stringPreferencesKey("primary_route_style")
         val AVOID_TOLLS = booleanPreferencesKey("avoid_tolls")

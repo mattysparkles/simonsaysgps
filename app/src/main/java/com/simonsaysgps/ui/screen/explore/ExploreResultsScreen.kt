@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.simonsaysgps.config.ReleaseSurface
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreResult
@@ -57,6 +58,7 @@ fun ExploreResultsScreen(
         errorMessage = state.explore.errorMessage,
         actionMessage = state.explore.actionMessage,
         autoPicked = state.explore.autoPicked,
+        showProviderDiagnostics = ReleaseSurface.fromBuildConfig().showProviderDiagnostics,
         onBack = onBack,
         onOpenPlaceDetail = { result ->
             viewModel.openPlaceDetail(result)
@@ -96,6 +98,7 @@ fun ExploreResultsScreenContent(
     errorMessage: String?,
     actionMessage: String?,
     autoPicked: Boolean,
+    showProviderDiagnostics: Boolean,
     onBack: () -> Unit,
     onOpenPlaceDetail: (ExploreResult) -> Unit,
     onPreviewOnMap: (ExploreResult) -> Unit,
@@ -136,9 +139,18 @@ fun ExploreResultsScreenContent(
             if (providerStatuses.isNotEmpty()) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Provider status", style = MaterialTheme.typography.titleMedium)
-                        providerStatuses.forEach { status ->
-                            Text("• ${status.provider}: ${if (status.available) "ready" else "fallback"} — ${status.detail}")
+                        Text(if (showProviderDiagnostics) "Provider status" else "Explore data status", style = MaterialTheme.typography.titleMedium)
+                        if (showProviderDiagnostics) {
+                            providerStatuses.forEach { status ->
+                                Text("• ${status.provider}: ${if (status.available) "ready" else "fallback"} — ${status.detail}")
+                            }
+                        } else {
+                            val available = providerStatuses.count { it.available }
+                            val fallbacks = providerStatuses.size - available
+                            Text("${available} data source${if (available == 1) "" else "s"} responded for this Explore round.")
+                            if (fallbacks > 0) {
+                                Text("${fallbacks} optional source${if (fallbacks == 1) "" else "s"} fell back gracefully, so suggestions may be lighter than usual.")
+                            }
                         }
                     }
                 }
