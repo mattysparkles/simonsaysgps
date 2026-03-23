@@ -3,6 +3,7 @@ package com.simonsaysgps.domain.repository.explore
 import com.simonsaysgps.domain.model.explore.InternalPlaceReview
 import com.simonsaysgps.domain.model.explore.PlaceDetailRecord
 import com.simonsaysgps.domain.model.explore.ExploreResult
+import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
 import kotlinx.coroutines.flow.Flow
 
 interface InternalReviewRepository {
@@ -15,4 +16,11 @@ interface InternalReviewRepository {
 
 interface PlaceDetailRepository {
     fun observePlaceDetail(seed: ExploreResult): Flow<PlaceDetailRecord>
+}
+
+interface SavedPlaceRepository {
+    val savedPlaces: Flow<List<SavedPlaceRecord>>
+    fun observeSavedPlace(canonicalPlaceId: String): Flow<SavedPlaceRecord?>
+    suspend fun upsert(place: SavedPlaceRecord)
+    suspend fun remove(canonicalPlaceId: String)
 }

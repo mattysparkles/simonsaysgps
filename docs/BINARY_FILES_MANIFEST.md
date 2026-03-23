@@ -15,3 +15,4 @@ This repository intentionally excludes tracked binary artifacts from the pull re
 
 - No new binary files were added by the visit history, personalized Explore, home anchor, or transport-profile PR.
 - No new binary files were added by the Place Detail, internal reviews, or See Reviews / Leave Review flow PR.
+- No new binary files were added by the saved places / favorite persistence and reuse PR.

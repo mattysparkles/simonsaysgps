@@ -51,6 +51,7 @@ fun ExploreResultsScreen(
         category = state.explore.selectedCategory,
         loading = state.explore.loading,
         results = state.explore.results,
+        savedPlaceIds = state.explore.savedPlaceIds,
         providerStatuses = state.explore.providerStatuses,
         infoMessage = state.explore.infoMessage,
         errorMessage = state.explore.errorMessage,
@@ -70,7 +71,7 @@ fun ExploreResultsScreen(
             viewModel.requestRoute()
             onStartNavigation()
         },
-        onSave = viewModel::saveExploreResult,
+        onSave = viewModel::toggleSavedExploreResult,
         onSeeReviews = { result ->
             viewModel.openPlaceDetail(result)
             onOpenPlaceReviews()
@@ -89,6 +90,7 @@ fun ExploreResultsScreenContent(
     category: ExploreCategory?,
     loading: Boolean,
     results: List<ExploreResult>,
+    savedPlaceIds: Set<String>,
     providerStatuses: List<ExploreProviderStatus>,
     infoMessage: String?,
     errorMessage: String?,
@@ -149,6 +151,7 @@ fun ExploreResultsScreenContent(
                         onPreviewOnMap = { onPreviewOnMap(result) },
                         onStartNavigation = { onStartNavigation(result) },
                         onSave = { onSave(result) },
+                        isSaved = result.candidate.id in savedPlaceIds,
                         onSeeReviews = { onSeeReviews(result) },
                         onLeaveReview = { onLeaveReview(result) }
                     )
@@ -165,6 +168,7 @@ private fun ExploreResultCard(
     onPreviewOnMap: () -> Unit,
     onStartNavigation: () -> Unit,
     onSave: () -> Unit,
+    isSaved: Boolean,
     onSeeReviews: () -> Unit,
     onLeaveReview: () -> Unit
 ) {
@@ -231,7 +235,7 @@ private fun ExploreResultCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSave) {
                     Icon(Icons.Default.Save, contentDescription = null)
-                    Text("Save")
+                    Text(if (isSaved) "Unsave" else "Save")
                 }
                 OutlinedButton(onClick = onSeeReviews) {
                     Icon(Icons.Default.Star, contentDescription = null)

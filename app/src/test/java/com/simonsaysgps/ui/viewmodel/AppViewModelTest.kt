@@ -19,6 +19,7 @@ import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.InternalPlaceReview
+import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
 import com.simonsaysgps.domain.model.explore.PlaceDetailRecord
 import com.simonsaysgps.domain.model.explore.PlaceReviewTag
 import com.simonsaysgps.domain.model.voice.CrowdReport
@@ -41,6 +42,7 @@ import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.repository.VisitHistoryRepository
 import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
 import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
+import com.simonsaysgps.domain.repository.explore.SavedPlaceRepository
 import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
 import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -58,6 +60,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -260,6 +263,7 @@ class AppViewModelTest {
         val voicePromptManager = mockk<VoicePromptManager>(relaxed = true)
         val settingsRepository = FakeSettingsRepository()
         val navigationSessionOrchestrator = FakeNavigationSessionOrchestrator()
+        val savedPlaceRepository = FakeSavedPlaceRepository()
         val engine = SimonSaysEngine(TurnDetector(), PromptFactory())
         val navigationUseCase = ObserveNavigationSessionUseCase(routingRepository = routingRepository, simonSaysEngine = engine)
 
@@ -280,8 +284,9 @@ class AppViewModelTest {
             navigationForegroundServiceController = serviceController,
             navigationSessionOrchestrator = navigationSessionOrchestrator,
             exploreOrchestrator = FakeExploreOrchestrator(),
-            placeDetailRepository = FakePlaceDetailRepository(FakeInternalReviewRepository()),
+            placeDetailRepository = FakePlaceDetailRepository(FakeInternalReviewRepository(), savedPlaceRepository),
             internalReviewRepository = FakeInternalReviewRepository(),
+            savedPlaceRepository = savedPlaceRepository,
             visitHistoryRepository = FakeVisitHistoryRepository(),
             crowdReportRepository = FakeCrowdReportRepository(),
             reviewDraftRepository = FakeReviewDraftRepository(),
@@ -325,6 +330,31 @@ class AppViewModelTest {
         assertThat(internalReviewRepository.reviews.value.single().reviewText).contains("Quiet stop")
     }
 
+    @Test
+    fun `saving and unsaving a place refreshes detail and saved surfaces immediately`() = runTest(dispatcher) {
+        val savedPlaceRepository = FakeSavedPlaceRepository()
+        val viewModel = createViewModel(savedPlaceRepository = savedPlaceRepository)
+
+        val result = FakeExploreOrchestrator().explore(
+            ExploreQuery(category = ExploreCategory.DELICIOUS, userLocation = Coordinate(0.0, 0.0))
+        ).results.single()
+
+        viewModel.openPlaceDetail(result)
+        advanceUntilIdle()
+        viewModel.toggleSavedPlaceDetail()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.placeDetail.isSaved).isTrue()
+        assertThat(viewModel.uiState.value.savedPlaces).hasSize(1)
+        assertThat(savedPlaceRepository.savedPlacesFlow.value.single().canonicalPlaceId).isEqualTo(result.candidate.id)
+
+        viewModel.toggleSavedPlaceDetail()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.placeDetail.isSaved).isFalse()
+        assertThat(viewModel.uiState.value.savedPlaces).isEmpty()
+    }
+
     private fun createViewModel(
         locationFlow: Flow<LocationSample> = MutableSharedFlow(extraBufferCapacity = 4),
         serviceController: NavigationForegroundServiceController = FakeNavigationForegroundServiceController(),
@@ -335,6 +365,7 @@ class AppViewModelTest {
         navigationSessionOrchestrator: FakeNavigationSessionOrchestrator = FakeNavigationSessionOrchestrator(),
         exploreOrchestrator: ExploreOrchestrator = FakeExploreOrchestrator(),
         internalReviewRepository: FakeInternalReviewRepository = FakeInternalReviewRepository(),
+        savedPlaceRepository: FakeSavedPlaceRepository = FakeSavedPlaceRepository(),
         visitHistoryRepository: VisitHistoryRepository = FakeVisitHistoryRepository(),
         crowdReportRepository: CrowdReportRepository = FakeCrowdReportRepository(),
         reviewDraftRepository: ReviewDraftRepository = FakeReviewDraftRepository(),
@@ -367,8 +398,9 @@ class AppViewModelTest {
             navigationForegroundServiceController = serviceController,
             navigationSessionOrchestrator = navigationSessionOrchestrator,
             exploreOrchestrator = exploreOrchestrator,
-            placeDetailRepository = FakePlaceDetailRepository(internalReviewRepository),
+            placeDetailRepository = FakePlaceDetailRepository(internalReviewRepository, savedPlaceRepository),
             internalReviewRepository = internalReviewRepository,
+            savedPlaceRepository = savedPlaceRepository,
             visitHistoryRepository = visitHistoryRepository,
             crowdReportRepository = crowdReportRepository,
             reviewDraftRepository = reviewDraftRepository,
@@ -531,24 +563,27 @@ class AppViewModelTest {
     }
 
     private class FakePlaceDetailRepository(
-        private val internalReviewRepository: FakeInternalReviewRepository
+        private val internalReviewRepository: FakeInternalReviewRepository,
+        private val savedPlaceRepository: FakeSavedPlaceRepository
     ) : PlaceDetailRepository {
-        override fun observePlaceDetail(seed: ExploreResult): Flow<PlaceDetailRecord> = internalReviewRepository.reviews.map { reviews ->
-            PlaceDetailRecord(
-                canonicalPlaceId = seed.candidate.id,
-                name = seed.candidate.name,
-                typeLabel = seed.candidate.typeLabel,
-                address = seed.candidate.address,
-                coordinate = seed.candidate.coordinate,
-                openNow = seed.candidate.openNow,
-                distanceMeters = seed.distanceMeters,
-                whyChosen = seed.primaryWhyChosen,
-                internalReviews = reviews.filter { it.canonicalPlaceId == seed.candidate.id },
-                internalAggregate = com.simonsaysgps.domain.model.explore.InternalReviewAggregateCalculator.calculate(
-                    reviews.filter { it.canonicalPlaceId == seed.candidate.id }
+        override fun observePlaceDetail(seed: ExploreResult): Flow<PlaceDetailRecord> =
+            combine(internalReviewRepository.reviews, savedPlaceRepository.savedPlacesFlow) { reviews, savedPlaces ->
+                PlaceDetailRecord(
+                    canonicalPlaceId = seed.candidate.id,
+                    name = seed.candidate.name,
+                    typeLabel = seed.candidate.typeLabel,
+                    address = seed.candidate.address,
+                    coordinate = seed.candidate.coordinate,
+                    openNow = seed.candidate.openNow,
+                    distanceMeters = seed.distanceMeters,
+                    whyChosen = seed.primaryWhyChosen,
+                    savedPlace = savedPlaces.firstOrNull { it.canonicalPlaceId == seed.candidate.id },
+                    internalReviews = reviews.filter { it.canonicalPlaceId == seed.candidate.id },
+                    internalAggregate = com.simonsaysgps.domain.model.explore.InternalReviewAggregateCalculator.calculate(
+                        reviews.filter { it.canonicalPlaceId == seed.candidate.id }
+                    )
                 )
-            )
-        }
+            }
     }
 
     private class FakeInternalReviewRepository : InternalReviewRepository {
@@ -563,6 +598,20 @@ class AppViewModelTest {
         }
         override suspend fun remove(reviewId: String) {
             reviews.value = reviews.value.filterNot { it.internalReviewId == reviewId }
+        }
+    }
+
+    private class FakeSavedPlaceRepository : SavedPlaceRepository {
+        val savedPlacesFlow = MutableStateFlow<List<SavedPlaceRecord>>(emptyList())
+        override val savedPlaces: Flow<List<SavedPlaceRecord>> = savedPlacesFlow
+        override fun observeSavedPlace(canonicalPlaceId: String): Flow<SavedPlaceRecord?> = savedPlacesFlow.map { saved ->
+            saved.firstOrNull { it.canonicalPlaceId == canonicalPlaceId }
+        }
+        override suspend fun upsert(place: SavedPlaceRecord) {
+            savedPlacesFlow.value = listOf(place) + savedPlacesFlow.value.filterNot { it.canonicalPlaceId == place.canonicalPlaceId }
+        }
+        override suspend fun remove(canonicalPlaceId: String) {
+            savedPlacesFlow.value = savedPlacesFlow.value.filterNot { it.canonicalPlaceId == canonicalPlaceId }
         }
     }
 

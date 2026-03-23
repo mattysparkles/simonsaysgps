@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.PlaceResult
+import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
 import com.simonsaysgps.ui.components.MapLibreMapView
 import com.simonsaysgps.ui.components.TopLevelDestination
 import com.simonsaysgps.ui.components.TopLevelNavigationBar
@@ -166,6 +167,7 @@ fun MapSearchScreenContent(
                 modifier = Modifier.weight(1f),
                 status = state.searchStatus,
                 searchResults = state.searchResults,
+                savedPlaces = state.savedPlaces,
                 recentDestinations = state.recentDestinations,
                 searchError = state.searchError,
                 searchInfo = state.searchInfo,
@@ -182,6 +184,7 @@ private fun SearchResultsSection(
     modifier: Modifier = Modifier,
     status: SearchStatus,
     searchResults: List<PlaceResult>,
+    savedPlaces: List<SavedPlaceRecord>,
     recentDestinations: List<PlaceResult>,
     searchError: String?,
     searchInfo: String?,
@@ -232,14 +235,37 @@ private fun SearchResultsSection(
         }
 
         SearchStatus.RECENTS -> {
-            if (recentDestinations.isEmpty()) {
+            if (recentDestinations.isEmpty() && savedPlaces.isEmpty()) {
                 MessageCard(
                     modifier = modifier,
-                    title = "No recent destinations yet",
-                    body = "Select a search result to keep it handy here for the next trip."
+                    title = "No recent or saved places yet",
+                    body = "Select a search result or save an Explore place to keep it handy here for the next trip."
                 )
             } else {
                 LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (savedPlaces.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Saved places", style = MaterialTheme.typography.titleMedium)
+                                Text("${savedPlaces.size}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        items(savedPlaces, key = { it.canonicalPlaceId }) { place ->
+                            DestinationCard(
+                                place = PlaceResult(
+                                    id = place.canonicalPlaceId,
+                                    name = place.name,
+                                    fullAddress = place.address,
+                                    coordinate = place.coordinate
+                                ),
+                                onSelect = { onPlaceSelected(PlaceResult(place.canonicalPlaceId, place.name, place.address, place.coordinate)) }
+                            )
+                        }
+                    }
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

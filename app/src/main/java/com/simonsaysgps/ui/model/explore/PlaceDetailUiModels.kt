@@ -33,6 +33,8 @@ data class PlaceDetailUiState(
     val internalReviews: List<InternalPlaceReview> = emptyList(),
     val externalReviewSummaries: List<ExternalReviewSummaryBlock> = emptyList(),
     val sourceLabels: List<String> = emptyList(),
+    val isSaved: Boolean = false,
+    val savedSummary: String? = null,
     val errorMessage: String? = null,
     val helperMessage: String? = null
 )
@@ -112,6 +114,8 @@ object PlaceDetailUiStateFactory {
             internalReviews = record.internalReviews,
             externalReviewSummaries = record.externalReviewSummaries,
             sourceLabels = record.sourceAttributions.map { it.label },
+            isSaved = record.savedPlace != null,
+            savedSummary = record.savedPlace?.let { "Saved locally on this device." },
             helperMessage = if (record.isPartial) "Showing the best provider data currently available for this place." else null
         )
     }

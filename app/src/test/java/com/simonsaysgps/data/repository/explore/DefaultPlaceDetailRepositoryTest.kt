@@ -12,6 +12,7 @@ import com.simonsaysgps.domain.model.explore.ExploreSourceAttribution
 import com.simonsaysgps.domain.model.explore.InternalPlaceReview
 import com.simonsaysgps.domain.model.explore.PlaceReviewTag
 import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
+import com.simonsaysgps.domain.repository.explore.SavedPlaceRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -22,13 +23,26 @@ import org.junit.Test
 class DefaultPlaceDetailRepositoryTest {
     @Test
     fun `mapping keeps internal and external review data separate`() = runTest {
-        val repository = DefaultPlaceDetailRepository(FakeInternalReviewRepository())
+        val repository = DefaultPlaceDetailRepository(
+            FakeInternalReviewRepository(),
+            FakeSavedPlaceRepository(
+                savedPlace = com.simonsaysgps.domain.model.explore.SavedPlaceRecord(
+                    canonicalPlaceId = "place-1",
+                    name = "Cafe",
+                    typeLabel = "Cafe",
+                    address = "1 Main Street",
+                    coordinate = Coordinate(40.0, -73.0),
+                    savedAtEpochMillis = 5L
+                )
+            )
+        )
         val detail = repository.observePlaceDetail(seedResult()).firstValue()
 
         assertThat(detail.internalAggregate?.count).isEqualTo(1)
         assertThat(detail.externalReviewSummaries).hasSize(1)
         assertThat(detail.externalReviewSummaries.single().providerLabel).isEqualTo("Provider summary")
         assertThat(detail.whyChosen).contains("easy detour")
+        assertThat(detail.savedPlace?.canonicalPlaceId).isEqualTo("place-1")
     }
 
     private fun seedResult() = ExploreResult(
@@ -85,6 +99,16 @@ class DefaultPlaceDetailRepositoryTest {
         override fun observeOwnReview(canonicalPlaceId: String): Flow<InternalPlaceReview?> = flowOf(reviews.value.first())
         override suspend fun upsert(review: InternalPlaceReview) { reviews.value = listOf(review) }
         override suspend fun remove(reviewId: String) { reviews.value = emptyList() }
+    }
+
+    private class FakeSavedPlaceRepository(
+        private val savedPlace: com.simonsaysgps.domain.model.explore.SavedPlaceRecord? = null
+    ) : SavedPlaceRepository {
+        override val savedPlaces: Flow<List<com.simonsaysgps.domain.model.explore.SavedPlaceRecord>> = flowOf(listOfNotNull(savedPlace))
+        override fun observeSavedPlace(canonicalPlaceId: String): Flow<com.simonsaysgps.domain.model.explore.SavedPlaceRecord?> =
+            flowOf(savedPlace?.takeIf { it.canonicalPlaceId == canonicalPlaceId })
+        override suspend fun upsert(place: com.simonsaysgps.domain.model.explore.SavedPlaceRecord) = Unit
+        override suspend fun remove(canonicalPlaceId: String) = Unit
     }
 }
 
