@@ -49,9 +49,7 @@ fun PlaceDetailScreen(
         onBack = onBack,
         onPreviewOnMap = onPreviewOnMap,
         onStartNavigation = onStartNavigation,
-        onSave = {
-            state.explore.results.firstOrNull { it.candidate.id == state.placeDetail.seedPlaceId }?.let(viewModel::saveExploreResult)
-        },
+        onSave = viewModel::toggleSavedPlaceDetail,
         onSeeReviews = onSeeReviews,
         onLeaveReview = {
             viewModel.startLeaveReview()
@@ -103,9 +101,11 @@ fun PlaceDetailScreenContent(
                             Text(state.address)
                             Text(state.statusLine)
                             Text(state.distanceLine)
+                            Text(if (state.isSaved) "Saved place" else "Not saved yet")
                             state.internalRatingSummary?.let { Text("Internal reviews: $it") }
                             state.externalRatingSummary?.let { Text("Provider summaries: $it") }
                             Text("Why this was chosen: ${state.whyChosen}")
+                            state.savedSummary?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             state.helperMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             state.phoneNumber?.let { Text("Phone: $it") }
                             state.websiteUrl?.let { Text("Website: $it") }
@@ -141,7 +141,7 @@ fun PlaceDetailScreenContent(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = onSave) {
                             Icon(Icons.Default.Save, contentDescription = null)
-                            Text("Save")
+                            Text(if (state.isSaved) "Unsave" else "Save")
                         }
                         OutlinedButton(onClick = onSeeReviews) {
                             Icon(Icons.Default.Star, contentDescription = null)

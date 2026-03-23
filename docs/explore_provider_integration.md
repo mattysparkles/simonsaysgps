@@ -83,7 +83,7 @@ When surfacing provider-backed Explore results:
 
 - Nominatim is the only fully implemented end-to-end external Explore provider path in this PR.
 - Event, review, and promotion providers are scaffolded rather than commercial/live integrations.
-- Review quick actions are still UI stubs; this PR focuses on aggregation and enrichment.
+- Review and save quick actions are now backed by local-first persistence, but external/provider write-back is still intentionally out of scope in this repo.
 - Android SDK availability is still required to run full Gradle Android tests locally.
 
 ## Binary file confirmation

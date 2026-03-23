@@ -37,6 +37,7 @@ import com.simonsaysgps.data.explore.NominatimPlaceDetailsProvider
 import com.simonsaysgps.data.explore.NominatimPlaceDiscoveryProvider
 import com.simonsaysgps.data.explore.RecentDestinationVisitHistoryProvider
 import com.simonsaysgps.data.repository.explore.DataStoreInternalReviewRepository
+import com.simonsaysgps.data.repository.explore.DataStoreSavedPlaceRepository
 import com.simonsaysgps.data.repository.explore.DefaultExploreRepository
 import com.simonsaysgps.data.repository.explore.DefaultPlaceDetailRepository
 import com.simonsaysgps.domain.repository.explore.EventProvider
@@ -47,6 +48,7 @@ import com.simonsaysgps.domain.repository.explore.PlaceDetailsProvider
 import com.simonsaysgps.domain.repository.explore.PlaceDiscoveryProvider
 import com.simonsaysgps.domain.repository.explore.PromotionSignalProvider
 import com.simonsaysgps.domain.repository.explore.ReviewProvider
+import com.simonsaysgps.domain.repository.explore.SavedPlaceRepository
 import com.simonsaysgps.domain.repository.explore.UserVisitHistoryProvider
 import com.simonsaysgps.domain.service.explore.DefaultExploreOrchestrator
 import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
@@ -247,6 +249,9 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindInternalReviewRepository(impl: DataStoreInternalReviewRepository): InternalReviewRepository
+
+    @Binds
+    abstract fun bindSavedPlaceRepository(impl: DataStoreSavedPlaceRepository): SavedPlaceRepository
 
     @Binds
     @IntoSet

@@ -18,6 +18,7 @@ import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.model.VisitHistoryEntry
 import com.simonsaysgps.domain.model.VisitObservationSource
 import com.simonsaysgps.domain.model.explore.InternalPlaceReview
+import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
 import com.simonsaysgps.domain.model.explore.PlaceReviewTag
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
@@ -41,6 +42,7 @@ import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.repository.VisitHistoryRepository
 import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
 import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
+import com.simonsaysgps.domain.repository.explore.SavedPlaceRepository
 import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
 import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -51,7 +53,6 @@ import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.domain.service.voice.VoiceAssistantManager
 import com.simonsaysgps.domain.service.voice.VoiceDispatchResult
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
-import com.simonsaysgps.ui.model.explore.PlaceDetailStatus
 import com.simonsaysgps.ui.model.explore.PlaceDetailUiState
 import com.simonsaysgps.ui.model.explore.PlaceDetailUiStateFactory
 import com.simonsaysgps.ui.model.explore.ReviewComposeUiState
@@ -84,6 +85,7 @@ class AppViewModel @Inject constructor(
     private val exploreOrchestrator: ExploreOrchestrator,
     private val placeDetailRepository: PlaceDetailRepository,
     private val internalReviewRepository: InternalReviewRepository,
+    private val savedPlaceRepository: SavedPlaceRepository,
     private val visitHistoryRepository: VisitHistoryRepository,
     private val crowdReportRepository: CrowdReportRepository,
     private val reviewDraftRepository: ReviewDraftRepository,
@@ -105,6 +107,7 @@ class AppViewModel @Inject constructor(
     private var placeDetailJob: Job? = null
     private var rerouteJob: Job? = null
     private var lastRecordedVisitPlaceId: String? = null
+    private var activePlaceDetailSeed: ExploreResult? = null
 
     init {
         viewModelScope.launch {
@@ -142,6 +145,15 @@ class AppViewModel @Inject constructor(
                         query = currentState.searchQuery,
                         hasRecentDestinations = recentDestinations.isNotEmpty()
                     )
+                )
+            }
+        }
+        viewModelScope.launch {
+            savedPlaceRepository.savedPlaces.collect { savedPlaces ->
+                val savedPlaceIds = savedPlaces.mapTo(linkedSetOf()) { it.canonicalPlaceId }
+                _uiState.value = _uiState.value.copy(
+                    savedPlaces = savedPlaces,
+                    explore = _uiState.value.explore.copy(savedPlaceIds = savedPlaceIds)
                 )
             }
         }
@@ -243,16 +255,27 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    fun saveExploreResult(result: ExploreResult) {
-        selectPlaceInternal(result.toPlaceResult(), saveRecent = true)
-        recordVisitForPlace(result.toPlaceResult(), VisitObservationSource.APP_CONFIRMED_SAVE, 0.82f, "Saved from Explore")
-        _uiState.value = _uiState.value.copy(
-            explore = _uiState.value.explore.copy(actionMessage = "Saved ${result.candidate.name} to recent destinations and first-party visit history.")
-        )
+    fun toggleSavedExploreResult(result: ExploreResult) {
+        viewModelScope.launch {
+            val saved = savedPlaceRepository.observeSavedPlace(result.candidate.id).first() != null
+            if (saved) {
+                savedPlaceRepository.remove(result.candidate.id)
+                _uiState.value = _uiState.value.copy(
+                    explore = _uiState.value.explore.copy(actionMessage = "Removed ${result.candidate.name} from saved places.")
+                )
+            } else {
+                savedPlaceRepository.upsert(result.toSavedPlaceRecord())
+                recordVisitForPlace(result.toPlaceResult(), VisitObservationSource.APP_CONFIRMED_SAVE, 0.82f, "Saved from Explore")
+                _uiState.value = _uiState.value.copy(
+                    explore = _uiState.value.explore.copy(actionMessage = "Saved ${result.candidate.name} locally for quick reuse.")
+                )
+            }
+        }
     }
 
     fun openPlaceDetail(result: ExploreResult) {
         placeDetailJob?.cancel()
+        activePlaceDetailSeed = result
         selectPlaceInternal(result.toPlaceResult(), saveRecent = false)
         _uiState.value = _uiState.value.copy(
             placeDetail = PlaceDetailUiStateFactory.loading(result.candidate.id),
@@ -270,9 +293,21 @@ class AppViewModel @Inject constructor(
 
     fun clearPlaceDetail() {
         placeDetailJob?.cancel()
+        activePlaceDetailSeed = null
         _uiState.value = _uiState.value.copy(
             placeDetail = PlaceDetailUiState(),
             reviewCompose = ReviewComposeUiState()
+        )
+    }
+
+    fun toggleSavedPlaceDetail() {
+        activePlaceDetailSeed?.let(::toggleSavedExploreResult)
+    }
+
+    fun selectSavedPlace(savedPlace: SavedPlaceRecord) {
+        selectPlaceInternal(savedPlace.toPlaceResult(), saveRecent = true)
+        _uiState.value = _uiState.value.copy(
+            explore = _uiState.value.explore.copy(actionMessage = "Loaded saved place ${savedPlace.name} for map preview or navigation.")
         )
     }
 
@@ -777,6 +812,23 @@ class AppViewModel @Inject constructor(
         coordinate = candidate.coordinate
     )
 
+    private fun ExploreResult.toSavedPlaceRecord() = SavedPlaceRecord(
+        canonicalPlaceId = candidate.id,
+        name = candidate.name,
+        typeLabel = candidate.typeLabel,
+        address = candidate.address,
+        coordinate = candidate.coordinate,
+        sourceAttributions = candidate.sourceAttributions,
+        savedAtEpochMillis = System.currentTimeMillis()
+    )
+
+    private fun SavedPlaceRecord.toPlaceResult() = PlaceResult(
+        id = canonicalPlaceId,
+        name = name,
+        fullAddress = address,
+        coordinate = coordinate
+    )
+
     private fun syncExploreReviewSummary(placeId: String, reviews: List<InternalPlaceReview>) {
         val aggregate = InternalReviewAggregateCalculator.calculate(reviews)
         val updatedResults = _uiState.value.explore.results.map { result ->
@@ -940,6 +992,7 @@ data class ExploreUiState(
     val selectedCategory: ExploreCategory? = null,
     val loading: Boolean = false,
     val results: List<ExploreResult> = emptyList(),
+    val savedPlaceIds: Set<String> = emptySet(),
     val providerStatuses: List<ExploreProviderStatus> = emptyList(),
     val infoMessage: String? = null,
     val errorMessage: String? = null,
@@ -978,6 +1031,7 @@ data class AppUiState(
     val routeInfo: String? = null,
     val lastPrompt: String? = null,
     val settings: SettingsModel = SettingsModel(),
+    val savedPlaces: List<SavedPlaceRecord> = emptyList(),
     val visitHistory: List<VisitHistoryEntry> = emptyList(),
     val explore: ExploreUiState = ExploreUiState(),
     val placeDetail: PlaceDetailUiState = PlaceDetailUiState(),

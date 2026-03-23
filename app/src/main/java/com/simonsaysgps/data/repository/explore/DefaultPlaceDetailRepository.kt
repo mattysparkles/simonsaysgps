@@ -7,17 +7,21 @@ import com.simonsaysgps.domain.model.explore.InternalReviewAggregateCalculator
 import com.simonsaysgps.domain.model.explore.PlaceDetailRecord
 import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
 import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
+import com.simonsaysgps.domain.repository.explore.SavedPlaceRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 
 @Singleton
 class DefaultPlaceDetailRepository @Inject constructor(
-    private val internalReviewRepository: InternalReviewRepository
+    private val internalReviewRepository: InternalReviewRepository,
+    private val savedPlaceRepository: SavedPlaceRepository
 ) : PlaceDetailRepository {
     override fun observePlaceDetail(seed: ExploreResult): Flow<PlaceDetailRecord> {
-        return internalReviewRepository.observeReviews(seed.candidate.id).map { reviews ->
+        return internalReviewRepository.observeReviews(seed.candidate.id).combine(
+            savedPlaceRepository.observeSavedPlace(seed.candidate.id)
+        ) { reviews, savedPlace ->
             val internalAggregate = InternalReviewAggregateCalculator.calculate(reviews)
             PlaceDetailRecord(
                 canonicalPlaceId = seed.candidate.id,
@@ -37,6 +41,7 @@ class DefaultPlaceDetailRepository @Inject constructor(
                 placeTags = seed.candidate.facets.map { it.name.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase) }.sorted(),
                 eventSnippets = seed.candidate.eventSignals.mapNotNull { it.summary ?: it.title },
                 sourceAttributions = seed.candidate.sourceAttributions,
+                savedPlace = savedPlace,
                 internalAggregate = internalAggregate,
                 internalReviews = reviews,
                 externalReviewSummaries = seed.candidate.reviewSummary?.thirdPartySources.orEmpty().map(::toExternalBlock)

@@ -51,6 +51,16 @@ data class ExternalReviewSummaryBlock(
     val excerpts: List<String> = emptyList()
 )
 
+data class SavedPlaceRecord(
+    val canonicalPlaceId: String,
+    val name: String,
+    val typeLabel: String,
+    val address: String,
+    val coordinate: com.simonsaysgps.domain.model.Coordinate,
+    val sourceAttributions: List<ExploreSourceAttribution> = emptyList(),
+    val savedAtEpochMillis: Long
+)
+
 data class PlaceDetailRecord(
     val canonicalPlaceId: String,
     val name: String,
@@ -69,6 +79,7 @@ data class PlaceDetailRecord(
     val placeTags: List<String> = emptyList(),
     val eventSnippets: List<String> = emptyList(),
     val sourceAttributions: List<ExploreSourceAttribution> = emptyList(),
+    val savedPlace: SavedPlaceRecord? = null,
     val internalAggregate: InternalReviewAggregate? = null,
     val internalReviews: List<InternalPlaceReview> = emptyList(),
     val externalReviewSummaries: List<ExternalReviewSummaryBlock> = emptyList()

@@ -93,7 +93,7 @@ fun PlaceReviewsScreenContent(
                         }
                         OutlinedButton(onClick = { onReportReview(review.authorDisplayName) }) { Text("Report review (hook)") }
                         if (review.authorDisplayName == "Local driver") {
-                            OutlinedButton(onClick = { onRemoveOwnReview(review.internalReviewId) }) { Text("Hide local review") }
+                            OutlinedButton(onClick = { onRemoveOwnReview(review.internalReviewId) }) { Text("Delete local review") }
                         }
                     }
                 }

@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.explore.ExploreCategory
+import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
 import com.simonsaysgps.ui.components.TopLevelDestination
 import com.simonsaysgps.ui.components.TopLevelNavigationBar
 import com.simonsaysgps.ui.viewmodel.AppViewModel
@@ -42,12 +43,17 @@ fun ExploreScreen(
     ExploreScreenContent(
         walkthroughVisible = state.explore.walkthroughVisible,
         selectedCategory = state.explore.selectedCategory,
+        savedPlaces = state.savedPlaces,
         settingsSummary = exploreSettingsSummary(state.settings.exploreSettings.defaultRadiusMiles, state.settings.exploreSettings.requireOpenNowByDefault),
         onDismissWalkthrough = viewModel::dismissExploreWalkthrough,
         onOpenSettings = onExploreSettings,
         onCategorySelected = {
             viewModel.loadExplore(it)
             onExploreResults()
+        },
+        onUseSavedPlace = {
+            viewModel.selectSavedPlace(it)
+            onMapClick()
         },
         onMapClick = onMapClick
     )
@@ -58,10 +64,12 @@ fun ExploreScreen(
 fun ExploreScreenContent(
     walkthroughVisible: Boolean,
     selectedCategory: ExploreCategory?,
+    savedPlaces: List<SavedPlaceRecord>,
     settingsSummary: String,
     onDismissWalkthrough: () -> Unit,
     onOpenSettings: () -> Unit,
     onCategorySelected: (ExploreCategory) -> Unit,
+    onUseSavedPlace: (SavedPlaceRecord) -> Unit,
     onMapClick: () -> Unit
 ) {
     Scaffold(
@@ -104,6 +112,25 @@ fun ExploreScreenContent(
                     Text("How Explore works", style = MaterialTheme.typography.titleMedium)
                     Text("Each chip maps to a ranking intent, not a promise of perfect data. The app combines distance, hours, reviews, novelty, route fit, and optional provider signals.")
                     Text(settingsSummary, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Saved places", style = MaterialTheme.typography.titleMedium)
+                    if (savedPlaces.isEmpty()) {
+                        Text("Saved favorites from Explore show up here for quick map preview or navigation entry.")
+                    } else {
+                        savedPlaces.take(3).forEach { savedPlace ->
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(savedPlace.name, style = MaterialTheme.typography.titleSmall)
+                                    Text(savedPlace.typeLabel, style = MaterialTheme.typography.bodySmall)
+                                    Text(savedPlace.address, style = MaterialTheme.typography.bodySmall)
+                                    TextButton(onClick = { onUseSavedPlace(savedPlace) }) { Text("Use on map") }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             FlowRow(

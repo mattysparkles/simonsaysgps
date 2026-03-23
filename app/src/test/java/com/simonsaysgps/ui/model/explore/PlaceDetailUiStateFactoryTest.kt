@@ -8,6 +8,7 @@ import com.simonsaysgps.domain.model.explore.InternalReviewAggregate
 import com.simonsaysgps.domain.model.explore.PlaceDetailRecord
 import com.simonsaysgps.domain.model.explore.PlaceReviewTag
 import com.simonsaysgps.domain.model.explore.ExploreSourceAttribution
+import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
 import org.junit.Test
 
 class PlaceDetailUiStateFactoryTest {
@@ -18,6 +19,7 @@ class PlaceDetailUiStateFactoryTest {
         assertThat(state.status).isEqualTo(PlaceDetailStatus.PARTIAL)
         assertThat(state.internalRatingSummary).contains("internal review")
         assertThat(state.externalRatingSummary).contains("Provider")
+        assertThat(state.isSaved).isTrue()
     }
 
     @Test
@@ -45,6 +47,14 @@ class PlaceDetailUiStateFactoryTest {
         whyChosen = "Close and reliable",
         placeTags = listOf("Food"),
         sourceAttributions = listOf(ExploreSourceAttribution("provider", "Provider", verified = true)),
+        savedPlace = SavedPlaceRecord(
+            canonicalPlaceId = "place-1",
+            name = "Cafe",
+            typeLabel = "Cafe",
+            address = "1 Main Street",
+            coordinate = Coordinate(1.0, 2.0),
+            savedAtEpochMillis = 1L
+        ),
         internalAggregate = InternalReviewAggregate(4.5, 2, listOf(PlaceReviewTag.QUIET)),
         internalReviews = listOf(
             InternalPlaceReview("review-1", "place-1", "Local driver", 5, "Great stop for families.", 1L, 2L)
