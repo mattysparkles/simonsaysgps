@@ -2,6 +2,7 @@ package com.simonsaysgps.domain.engine
 
 import com.google.common.truth.Truth.assertThat
 import com.simonsaysgps.domain.model.Coordinate
+import com.simonsaysgps.domain.model.HeadingConfidence
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.model.ManeuverAuthorization
 import com.simonsaysgps.domain.model.RouteManeuver
@@ -33,13 +34,35 @@ class TurnDetectorTest {
         )
         assertThat(detection.occurred).isTrue()
         assertThat(detection.onRouteCorridor).isTrue()
+        assertThat(detection.headingConfidence).isEqualTo(HeadingConfidence.HIGH)
     }
 
-    private fun sample(lat: Double, lon: Double, bearing: Float) = LocationSample(
+    @Test
+    fun `detector rejects slight heading drift while slowly approaching turn`() {
+        val detection = detector.detect(
+            previous = sample(0.0, 0.00006, 5f, speed = 1f, timestampMillis = 1_000L),
+            current = sample(0.0, 0.00008, 22f, speed = 1f, timestampMillis = 2_000L),
+            maneuver = maneuver,
+            routeGeometry = listOf(Coordinate(0.0, 0.0), Coordinate(0.0, 0.0001), Coordinate(0.0001, 0.0001))
+        )
+
+        assertThat(detection.headingConfidence).isEqualTo(HeadingConfidence.LOW)
+        assertThat(detection.matchedExpectedTurn).isFalse()
+        assertThat(detection.occurred).isFalse()
+    }
+
+    private fun sample(
+        lat: Double,
+        lon: Double,
+        bearing: Float,
+        speed: Float = 5f,
+        accuracy: Float = 5f,
+        timestampMillis: Long = 0L
+    ) = LocationSample(
         coordinate = Coordinate(lat, lon),
-        accuracyMeters = 5f,
+        accuracyMeters = accuracy,
         bearing = bearing,
-        speedMetersPerSecond = 5f,
-        timestampMillis = 0L
+        speedMetersPerSecond = speed,
+        timestampMillis = timestampMillis
     )
 }

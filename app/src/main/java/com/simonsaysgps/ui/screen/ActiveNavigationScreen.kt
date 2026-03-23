@@ -292,9 +292,15 @@ private fun DebugOverlayContent(
 GPS: $latitude, $longitude
 Step index: ${navigation.activeManeuverIndex}
 Distance: ${navigation.distanceToNextManeuverMeters}
+Active step distance: ${navigation.debugInfo.activeStepDistanceMeters}
 Simon auth: ${navigation.upcomingManeuver?.authorization}
 Arrival: ${navigation.arrivalStatus}
 Heading: ${navigation.headingDegrees}
+Heading confidence: ${navigation.debugInfo.headingConfidence}
+Corridor: ${navigation.debugInfo.routeCorridorStatus} (${navigation.debugInfo.routeCorridorDistanceMeters} / ${navigation.debugInfo.routeCorridorThresholdMeters})
+Hysteresis: ${navigation.debugInfo.hysteresisState}
+Reroute suppression: ${navigation.debugInfo.rerouteSuppressionReason}
+Last transition: ${navigation.debugInfo.lastTransitionReason}
 Off-route: ${navigation.offRoute}
 Last reroute: ${navigation.lastRerouteReason}
             """.trimIndent(),

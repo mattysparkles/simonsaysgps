@@ -103,6 +103,7 @@ class AppViewModel @Inject constructor(
     private var searchJob: Job? = null
     private var exploreJob: Job? = null
     private var placeDetailJob: Job? = null
+    private var rerouteJob: Job? = null
     private var lastRecordedVisitPlaceId: String? = null
 
     init {
@@ -688,7 +689,7 @@ class AppViewModel @Inject constructor(
                     navigationSessionOrchestrator.syncSession(updatedNavigation)
                 }
                 if (simonSaysEngine.shouldReroute(updatedNavigation)) {
-                    triggerReroute(location.coordinate)
+                    triggerReroute(location.coordinate, updatedNavigation.lastRerouteReason)
                 }
                 previousLocation = location
             }
@@ -725,15 +726,25 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun triggerReroute(origin: Coordinate) {
+    private fun triggerReroute(origin: Coordinate, reason: com.simonsaysgps.domain.model.RerouteReason) {
+        if (rerouteJob?.isActive == true) {
+            Log.d(TAG, "Reroute already in flight; suppressing duplicate request. reason=$reason")
+            return
+        }
         val destination = routeDestination ?: return
-        viewModelScope.launch {
-            when (val routeResult = routingRepository.calculateRoute(origin, destination)) {
+        rerouteJob = viewModelScope.launch {
+            when (val routeResult = navigationUseCase.reroute(origin, destination, _uiState.value.navigationState.route, reason)) {
                 is RepositoryResult.Success -> {
                     val route = simonSaysEngine.assignAuthorizations(routeResult.value, settings.value.gameMode)
                     val previousState = _uiState.value.navigationState
-                    val updatedState = navigationUseCase.start(route)
-                    Log.i(TAG, "Reroute completed. maneuverCount=${route.maneuvers.size} source=${routeResult.source}")
+                    val updatedState = navigationUseCase.start(route).copy(
+                        rerouteCooldownUntilMillis = System.currentTimeMillis() + 8_000L,
+                        debugInfo = previousState.debugInfo.copy(
+                            rerouteSuppressionReason = "reroute-completed-cooldown",
+                            lastTransitionReason = "reroute-completed:$reason"
+                        )
+                    )
+                    Log.i(TAG, "Reroute completed. maneuverCount=${route.maneuvers.size} source=${routeResult.source} reason=$reason")
                     _uiState.value = _uiState.value.copy(
                         routePreview = route,
                         navigationState = updatedState,
