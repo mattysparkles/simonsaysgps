@@ -40,6 +40,9 @@ import com.simonsaysgps.ui.viewmodel.AppViewModel
 fun ExploreResultsScreen(
     viewModel: AppViewModel,
     onBack: () -> Unit,
+    onOpenPlaceDetail: () -> Unit,
+    onOpenPlaceReviews: () -> Unit,
+    onOpenLeaveReview: () -> Unit,
     onPreviewOnMap: () -> Unit,
     onStartNavigation: () -> Unit
 ) {
@@ -54,6 +57,10 @@ fun ExploreResultsScreen(
         actionMessage = state.explore.actionMessage,
         autoPicked = state.explore.autoPicked,
         onBack = onBack,
+        onOpenPlaceDetail = { result ->
+            viewModel.openPlaceDetail(result)
+            onOpenPlaceDetail()
+        },
         onPreviewOnMap = { result ->
             viewModel.previewExploreResult(result)
             onPreviewOnMap()
@@ -65,12 +72,14 @@ fun ExploreResultsScreen(
         },
         onSave = viewModel::saveExploreResult,
         onSeeReviews = { result ->
-            val reviewText = result.candidate.reviewSummary?.sources?.joinToString(separator = " | ") {
-                "${it.providerLabel}: ${it.averageRating?.let { rating -> "%.1f".format(rating) + "★" } ?: "No rating"} (${it.reviewCount})"
-            } ?: "No review summary available yet."
-            viewModel.noteExploreAction("Review sources: $reviewText")
+            viewModel.openPlaceDetail(result)
+            onOpenPlaceReviews()
         },
-        onLeaveReview = { result -> viewModel.noteExploreAction("Leave-review flow stub for ${result.candidate.name}. Hook this to your review composer later.") }
+        onLeaveReview = { result ->
+            viewModel.openPlaceDetail(result)
+            viewModel.startLeaveReview()
+            onOpenLeaveReview()
+        }
     )
 }
 
@@ -86,6 +95,7 @@ fun ExploreResultsScreenContent(
     actionMessage: String?,
     autoPicked: Boolean,
     onBack: () -> Unit,
+    onOpenPlaceDetail: (ExploreResult) -> Unit,
     onPreviewOnMap: (ExploreResult) -> Unit,
     onStartNavigation: (ExploreResult) -> Unit,
     onSave: (ExploreResult) -> Unit,
@@ -135,6 +145,7 @@ fun ExploreResultsScreenContent(
                 items(results, key = { it.candidate.id }) { result ->
                     ExploreResultCard(
                         result = result,
+                        onOpenPlaceDetail = { onOpenPlaceDetail(result) },
                         onPreviewOnMap = { onPreviewOnMap(result) },
                         onStartNavigation = { onStartNavigation(result) },
                         onSave = { onSave(result) },
@@ -150,6 +161,7 @@ fun ExploreResultsScreenContent(
 @Composable
 private fun ExploreResultCard(
     result: ExploreResult,
+    onOpenPlaceDetail: () -> Unit,
     onPreviewOnMap: () -> Unit,
     onStartNavigation: () -> Unit,
     onSave: () -> Unit,
@@ -159,7 +171,7 @@ private fun ExploreResultCard(
     val candidate = result.candidate
     val reviewSummary = candidate.reviewSummary
     val sourcesText = candidate.sourceAttributions.joinToString { it.label }
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onOpenPlaceDetail, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(candidate.name, style = MaterialTheme.typography.titleLarge)
             Text(candidate.typeLabel, style = MaterialTheme.typography.labelLarge)
@@ -187,6 +199,9 @@ private fun ExploreResultCard(
                     }
                 )
             } ?: Text("Ratings unavailable")
+            if ((reviewSummary?.internalCount ?: 0) > 0) {
+                AssistChip(onClick = onOpenPlaceDetail, label = { Text("${reviewSummary?.internalCount} internal review${if (reviewSummary?.internalCount == 1) "" else "s"}") })
+            }
             candidate.primaryPromotion?.let {
                 Text("${if (it.inferred) "Possible sale" else "Sale"}: ${it.summary} (${(it.confidence * 100).toInt()}% confidence)")
             }

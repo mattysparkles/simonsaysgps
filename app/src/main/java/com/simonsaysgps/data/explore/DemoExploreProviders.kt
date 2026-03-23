@@ -193,21 +193,6 @@ class CuratedReviewProvider @Inject constructor() : ReviewProvider {
 
     override suspend fun reviews(query: ExploreQuery, candidates: List<ExploreCandidate>): Map<String, List<ExploreReviewSourceSummary>> {
         return candidates.associate { candidate ->
-            val internal = ExploreReviewSourceSummary(
-                provider = "internal-community",
-                providerLabel = "Simon Says GPS",
-                averageRating = internalRatingFor(candidate),
-                reviewCount = internalCountFor(candidate),
-                summary = internalSummaryFor(candidate),
-                internal = true,
-                attribution = ExploreSourceAttribution(
-                    provider = "internal-community",
-                    label = "Simon Says GPS",
-                    verified = true,
-                    debugDetail = "Internal app community summary"
-                ),
-                confidence = 0.96f
-            )
             val external = ExploreReviewSourceSummary(
                 provider = providerId,
                 providerLabel = "Provider summary",
@@ -224,21 +209,8 @@ class CuratedReviewProvider @Inject constructor() : ReviewProvider {
                 ),
                 confidence = 0.72f
             )
-            candidate.id to listOf(internal, external).sortedByDescending { it.internal }
+            candidate.id to listOf(external)
         }
-    }
-
-    private fun internalRatingFor(candidate: ExploreCandidate): Double = when {
-        ExploreFacet.QUIET in candidate.facets -> 4.8
-        ExploreFacet.FOOD in candidate.facets -> 4.7
-        ExploreFacet.KIDS in candidate.facets -> 4.6
-        else -> 4.4
-    }
-
-    private fun internalCountFor(candidate: ExploreCandidate): Int = when {
-        candidate.visitedBefore -> 14
-        ExploreFacet.FOOD in candidate.facets -> 10
-        else -> 4
     }
 
     private fun externalRatingFor(candidate: ExploreCandidate): Double = when {
@@ -251,12 +223,6 @@ class CuratedReviewProvider @Inject constructor() : ReviewProvider {
         ExploreFacet.SHOPPING in candidate.facets -> 180
         ExploreFacet.FOOD in candidate.facets -> 220
         else -> 72
-    }
-
-    private fun internalSummaryFor(candidate: ExploreCandidate): String = when {
-        ExploreFacet.QUIET in candidate.facets -> "Internal reviewers consistently mention a calmer stop than nearby alternatives."
-        ExploreFacet.FOOD in candidate.facets -> "Internal reviewers like the reliability and easy stop-in experience."
-        else -> "Internal reviews are positive when this place appears in trips."
     }
 
     private fun externalSummaryFor(candidate: ExploreCandidate): String = when {

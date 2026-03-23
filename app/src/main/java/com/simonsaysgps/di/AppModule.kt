@@ -32,11 +32,16 @@ import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.data.explore.CuratedEventProvider
 import com.simonsaysgps.data.explore.CuratedPromotionSignalProvider
 import com.simonsaysgps.data.explore.CuratedReviewProvider
+import com.simonsaysgps.data.explore.InternalReviewExploreProvider
 import com.simonsaysgps.data.explore.NominatimPlaceDetailsProvider
 import com.simonsaysgps.data.explore.NominatimPlaceDiscoveryProvider
 import com.simonsaysgps.data.explore.RecentDestinationVisitHistoryProvider
+import com.simonsaysgps.data.repository.explore.DataStoreInternalReviewRepository
 import com.simonsaysgps.data.repository.explore.DefaultExploreRepository
+import com.simonsaysgps.data.repository.explore.DefaultPlaceDetailRepository
 import com.simonsaysgps.domain.repository.explore.EventProvider
+import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
+import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
 import com.simonsaysgps.domain.repository.explore.ExploreRepository
 import com.simonsaysgps.domain.repository.explore.PlaceDetailsProvider
 import com.simonsaysgps.domain.repository.explore.PlaceDiscoveryProvider
@@ -238,6 +243,12 @@ abstract class RepositoryModule {
     abstract fun bindExploreRepository(impl: DefaultExploreRepository): ExploreRepository
 
     @Binds
+    abstract fun bindPlaceDetailRepository(impl: DefaultPlaceDetailRepository): PlaceDetailRepository
+
+    @Binds
+    abstract fun bindInternalReviewRepository(impl: DataStoreInternalReviewRepository): InternalReviewRepository
+
+    @Binds
     @IntoSet
     abstract fun bindPlaceDiscoveryProvider(impl: NominatimPlaceDiscoveryProvider): PlaceDiscoveryProvider
 
@@ -251,6 +262,10 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindVisitHistoryProvider(impl: RecentDestinationVisitHistoryProvider): UserVisitHistoryProvider
+
+    @Binds
+    @IntoSet
+    abstract fun bindInternalReviewProvider(impl: InternalReviewExploreProvider): ReviewProvider
 
     @Binds
     @IntoSet

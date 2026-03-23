@@ -18,6 +18,9 @@ import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.model.explore.ExploreCategory
+import com.simonsaysgps.domain.model.explore.InternalPlaceReview
+import com.simonsaysgps.domain.model.explore.PlaceDetailRecord
+import com.simonsaysgps.domain.model.explore.PlaceReviewTag
 import com.simonsaysgps.domain.model.voice.CrowdReport
 import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
 import com.simonsaysgps.domain.model.voice.ReviewDraft
@@ -36,6 +39,8 @@ import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.repository.VisitHistoryRepository
+import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
+import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
 import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
 import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -50,10 +55,11 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -274,6 +280,8 @@ class AppViewModelTest {
             navigationForegroundServiceController = serviceController,
             navigationSessionOrchestrator = navigationSessionOrchestrator,
             exploreOrchestrator = FakeExploreOrchestrator(),
+            placeDetailRepository = FakePlaceDetailRepository(FakeInternalReviewRepository()),
+            internalReviewRepository = FakeInternalReviewRepository(),
             visitHistoryRepository = FakeVisitHistoryRepository(),
             crowdReportRepository = FakeCrowdReportRepository(),
             reviewDraftRepository = FakeReviewDraftRepository(),
@@ -293,6 +301,30 @@ class AppViewModelTest {
         assertThat(viewModel.uiState.value.routeError).contains("timed out")
     }
 
+    @Test
+    fun `submitting a review refreshes place detail immediately`() = runTest(dispatcher) {
+        val internalReviewRepository = FakeInternalReviewRepository()
+        val viewModel = createViewModel(internalReviewRepository = internalReviewRepository)
+
+        val result = FakeExploreOrchestrator().explore(
+            ExploreQuery(category = ExploreCategory.DELICIOUS, userLocation = Coordinate(0.0, 0.0))
+        ).results.single()
+        viewModel.openPlaceDetail(result)
+        advanceUntilIdle()
+
+        viewModel.startLeaveReview()
+        advanceUntilIdle()
+        viewModel.updateReviewRating(5)
+        viewModel.updateReviewText("Quiet stop with quick parking and friendly staff.")
+        viewModel.toggleReviewTag(PlaceReviewTag.QUIET)
+        viewModel.submitReview()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.placeDetail.internalReviews).hasSize(1)
+        assertThat(viewModel.uiState.value.placeDetail.internalRatingSummary).contains("1 internal review")
+        assertThat(internalReviewRepository.reviews.value.single().reviewText).contains("Quiet stop")
+    }
+
     private fun createViewModel(
         locationFlow: Flow<LocationSample> = MutableSharedFlow(extraBufferCapacity = 4),
         serviceController: NavigationForegroundServiceController = FakeNavigationForegroundServiceController(),
@@ -302,6 +334,7 @@ class AppViewModelTest {
         recentDestinationRepository: RecentDestinationRepository = FakeRecentDestinationRepository(),
         navigationSessionOrchestrator: FakeNavigationSessionOrchestrator = FakeNavigationSessionOrchestrator(),
         exploreOrchestrator: ExploreOrchestrator = FakeExploreOrchestrator(),
+        internalReviewRepository: FakeInternalReviewRepository = FakeInternalReviewRepository(),
         visitHistoryRepository: VisitHistoryRepository = FakeVisitHistoryRepository(),
         crowdReportRepository: CrowdReportRepository = FakeCrowdReportRepository(),
         reviewDraftRepository: ReviewDraftRepository = FakeReviewDraftRepository(),
@@ -334,6 +367,8 @@ class AppViewModelTest {
             navigationForegroundServiceController = serviceController,
             navigationSessionOrchestrator = navigationSessionOrchestrator,
             exploreOrchestrator = exploreOrchestrator,
+            placeDetailRepository = FakePlaceDetailRepository(internalReviewRepository),
+            internalReviewRepository = internalReviewRepository,
             visitHistoryRepository = visitHistoryRepository,
             crowdReportRepository = crowdReportRepository,
             reviewDraftRepository = reviewDraftRepository,
@@ -493,6 +528,42 @@ class AppViewModelTest {
         override suspend fun record(entry: VisitHistoryEntry) { visitHistory.value = listOf(entry) + visitHistory.value }
         override suspend fun remove(placeId: String) { visitHistory.value = visitHistory.value.filterNot { it.placeId == placeId } }
         override suspend fun clear() { visitHistory.value = emptyList() }
+    }
+
+    private class FakePlaceDetailRepository(
+        private val internalReviewRepository: FakeInternalReviewRepository
+    ) : PlaceDetailRepository {
+        override fun observePlaceDetail(seed: ExploreResult): Flow<PlaceDetailRecord> = internalReviewRepository.reviews.map { reviews ->
+            PlaceDetailRecord(
+                canonicalPlaceId = seed.candidate.id,
+                name = seed.candidate.name,
+                typeLabel = seed.candidate.typeLabel,
+                address = seed.candidate.address,
+                coordinate = seed.candidate.coordinate,
+                openNow = seed.candidate.openNow,
+                distanceMeters = seed.distanceMeters,
+                whyChosen = seed.primaryWhyChosen,
+                internalReviews = reviews.filter { it.canonicalPlaceId == seed.candidate.id },
+                internalAggregate = com.simonsaysgps.domain.model.explore.InternalReviewAggregateCalculator.calculate(
+                    reviews.filter { it.canonicalPlaceId == seed.candidate.id }
+                )
+            )
+        }
+    }
+
+    private class FakeInternalReviewRepository : InternalReviewRepository {
+        val reviews = MutableStateFlow<List<InternalPlaceReview>>(emptyList())
+        override val localAuthorDisplayName: Flow<String> = flowOf("Local driver")
+        override fun observeReviews(canonicalPlaceId: String): Flow<List<InternalPlaceReview>> = reviews
+        override fun observeOwnReview(canonicalPlaceId: String): Flow<InternalPlaceReview?> = reviews.map { list ->
+            list.firstOrNull { it.canonicalPlaceId == canonicalPlaceId }
+        }
+        override suspend fun upsert(review: InternalPlaceReview) {
+            reviews.value = listOf(review) + reviews.value.filterNot { it.internalReviewId == review.internalReviewId }
+        }
+        override suspend fun remove(reviewId: String) {
+            reviews.value = reviews.value.filterNot { it.internalReviewId == reviewId }
+        }
     }
 
     private class FakeCrowdReportRepository : CrowdReportRepository {

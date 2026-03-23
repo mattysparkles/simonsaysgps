@@ -17,11 +17,17 @@ import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.model.VisitHistoryEntry
 import com.simonsaysgps.domain.model.VisitObservationSource
+import com.simonsaysgps.domain.model.explore.InternalPlaceReview
+import com.simonsaysgps.domain.model.explore.PlaceReviewTag
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreQuery
+import com.simonsaysgps.domain.model.explore.ExploreReviewSourceSummary
+import com.simonsaysgps.domain.model.explore.ExploreReviewSummary
 import com.simonsaysgps.domain.model.explore.ExploreResult
 import com.simonsaysgps.domain.model.explore.ExploreSettings
+import com.simonsaysgps.domain.model.explore.ExploreSourceAttribution
+import com.simonsaysgps.domain.model.explore.InternalReviewAggregateCalculator
 import com.simonsaysgps.domain.model.voice.CrowdReport
 import com.simonsaysgps.domain.model.voice.CrowdReportType
 import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
@@ -33,6 +39,8 @@ import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.repository.VisitHistoryRepository
+import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
+import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
 import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
 import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
@@ -43,6 +51,11 @@ import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.domain.service.voice.VoiceAssistantManager
 import com.simonsaysgps.domain.service.voice.VoiceDispatchResult
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
+import com.simonsaysgps.ui.model.explore.PlaceDetailStatus
+import com.simonsaysgps.ui.model.explore.PlaceDetailUiState
+import com.simonsaysgps.ui.model.explore.PlaceDetailUiStateFactory
+import com.simonsaysgps.ui.model.explore.ReviewComposeUiState
+import com.simonsaysgps.ui.model.explore.ReviewComposeValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -51,6 +64,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -68,6 +82,8 @@ class AppViewModel @Inject constructor(
     private val navigationForegroundServiceController: NavigationForegroundServiceController,
     private val navigationSessionOrchestrator: NavigationSessionOrchestrator,
     private val exploreOrchestrator: ExploreOrchestrator,
+    private val placeDetailRepository: PlaceDetailRepository,
+    private val internalReviewRepository: InternalReviewRepository,
     private val visitHistoryRepository: VisitHistoryRepository,
     private val crowdReportRepository: CrowdReportRepository,
     private val reviewDraftRepository: ReviewDraftRepository,
@@ -86,6 +102,7 @@ class AppViewModel @Inject constructor(
     private var routeDestination: Coordinate? = null
     private var searchJob: Job? = null
     private var exploreJob: Job? = null
+    private var placeDetailJob: Job? = null
     private var lastRecordedVisitPlaceId: String? = null
 
     init {
@@ -230,6 +247,136 @@ class AppViewModel @Inject constructor(
         recordVisitForPlace(result.toPlaceResult(), VisitObservationSource.APP_CONFIRMED_SAVE, 0.82f, "Saved from Explore")
         _uiState.value = _uiState.value.copy(
             explore = _uiState.value.explore.copy(actionMessage = "Saved ${result.candidate.name} to recent destinations and first-party visit history.")
+        )
+    }
+
+    fun openPlaceDetail(result: ExploreResult) {
+        placeDetailJob?.cancel()
+        selectPlaceInternal(result.toPlaceResult(), saveRecent = false)
+        _uiState.value = _uiState.value.copy(
+            placeDetail = PlaceDetailUiStateFactory.loading(result.candidate.id),
+            reviewCompose = ReviewComposeUiState()
+        )
+        placeDetailJob = viewModelScope.launch {
+            placeDetailRepository.observePlaceDetail(result).collect { detail ->
+                _uiState.value = _uiState.value.copy(
+                    placeDetail = PlaceDetailUiStateFactory.fromRecord(detail)
+                )
+                syncExploreReviewSummary(detail.canonicalPlaceId, detail.internalReviews)
+            }
+        }
+    }
+
+    fun clearPlaceDetail() {
+        placeDetailJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            placeDetail = PlaceDetailUiState(),
+            reviewCompose = ReviewComposeUiState()
+        )
+    }
+
+    fun startLeaveReview() {
+        val detail = _uiState.value.placeDetail
+        val placeId = detail.seedPlaceId ?: return
+        viewModelScope.launch {
+            val existing = internalReviewRepository.observeOwnReview(placeId).first()
+            _uiState.value = _uiState.value.copy(
+                reviewCompose = ReviewComposeUiState(
+                    canonicalPlaceId = placeId,
+                    placeName = detail.title,
+                    existingReviewId = existing?.internalReviewId,
+                    rating = existing?.rating ?: _uiState.value.reviewCompose.rating,
+                    reviewText = existing?.reviewText ?: _uiState.value.reviewCompose.reviewText,
+                    selectedTags = existing?.tags ?: _uiState.value.reviewCompose.selectedTags,
+                    helperMessage = if (existing == null) "Your review is stored locally on this device for now." else "Editing your local review for this place."
+                )
+            )
+        }
+    }
+
+    fun updateReviewRating(rating: Int) {
+        _uiState.value = _uiState.value.copy(
+            reviewCompose = _uiState.value.reviewCompose.copy(rating = rating, validationError = null, successMessage = null)
+        )
+    }
+
+    fun updateReviewText(reviewText: String) {
+        _uiState.value = _uiState.value.copy(
+            reviewCompose = _uiState.value.reviewCompose.copy(reviewText = reviewText, validationError = null, successMessage = null)
+        )
+    }
+
+    fun toggleReviewTag(tag: PlaceReviewTag) {
+        val current = _uiState.value.reviewCompose.selectedTags
+        _uiState.value = _uiState.value.copy(
+            reviewCompose = _uiState.value.reviewCompose.copy(
+                selectedTags = if (tag in current) current - tag else current + tag,
+                validationError = null,
+                successMessage = null
+            )
+        )
+    }
+
+    fun submitReview() {
+        val compose = _uiState.value.reviewCompose
+        val placeId = compose.canonicalPlaceId ?: return
+        val validationError = ReviewComposeValidator.validate(compose.rating, compose.reviewText)
+        if (validationError != null) {
+            _uiState.value = _uiState.value.copy(
+                reviewCompose = compose.copy(validationError = validationError)
+            )
+            return
+        }
+        viewModelScope.launch {
+            val author = internalReviewRepository.localAuthorDisplayName.first()
+            val now = System.currentTimeMillis()
+            val existing = internalReviewRepository.observeOwnReview(placeId).first()
+            val reviewId = compose.existingReviewId ?: existing?.internalReviewId ?: "internal-review-$placeId-$now"
+            val createdAt = existing?.createdAtEpochMillis ?: now
+            internalReviewRepository.upsert(
+                InternalPlaceReview(
+                    internalReviewId = reviewId,
+                    canonicalPlaceId = placeId,
+                    authorDisplayName = author,
+                    rating = compose.rating,
+                    reviewText = compose.reviewText.trim(),
+                    createdAtEpochMillis = createdAt,
+                    updatedAtEpochMillis = now,
+                    tags = compose.selectedTags,
+                    visitContext = _uiState.value.placeDetail.whyChosen.takeIf { it.isNotBlank() }
+                )
+            )
+            _uiState.value = _uiState.value.copy(
+                reviewCompose = compose.copy(
+                    existingReviewId = reviewId,
+                    saving = false,
+                    validationError = null,
+                    successMessage = "Review saved locally and shown immediately."
+                ),
+                explore = _uiState.value.explore.copy(actionMessage = "Saved your internal review for ${_uiState.value.placeDetail.title}.")
+            )
+        }
+    }
+
+    fun dismissReviewComposeMessage() {
+        _uiState.value = _uiState.value.copy(
+            reviewCompose = _uiState.value.reviewCompose.copy(validationError = null, successMessage = null)
+        )
+    }
+
+    fun removeOwnReview(reviewId: String) {
+        viewModelScope.launch {
+            internalReviewRepository.remove(reviewId)
+            _uiState.value = _uiState.value.copy(
+                reviewCompose = ReviewComposeUiState(),
+                explore = _uiState.value.explore.copy(actionMessage = "Removed your local review from this device.")
+            )
+        }
+    }
+
+    fun reportReviewPlaceholder(author: String) {
+        _uiState.value = _uiState.value.copy(
+            explore = _uiState.value.explore.copy(actionMessage = "Reporting hooks are scaffolded for a future moderation flow. Review author: $author.")
         )
     }
 
@@ -619,6 +766,44 @@ class AppViewModel @Inject constructor(
         coordinate = candidate.coordinate
     )
 
+    private fun syncExploreReviewSummary(placeId: String, reviews: List<InternalPlaceReview>) {
+        val aggregate = InternalReviewAggregateCalculator.calculate(reviews)
+        val updatedResults = _uiState.value.explore.results.map { result ->
+            if (result.candidate.id != placeId) return@map result
+            val existingExternal = result.candidate.reviewSummary?.thirdPartySources.orEmpty()
+            val internalSource = aggregate?.let {
+                ExploreReviewSourceSummary(
+                    provider = "internal-community",
+                    providerLabel = "Simon Says GPS",
+                    averageRating = it.averageRating,
+                    reviewCount = it.count,
+                    summary = it.topTags.takeIf { tags -> tags.isNotEmpty() }?.joinToString(prefix = "Tagged: ") { tag -> tag.label },
+                    internal = true,
+                    attribution = ExploreSourceAttribution("internal-community", "Simon Says GPS", verified = true),
+                    confidence = 0.99f
+                )
+            }
+            val sources = listOfNotNull(internalSource) + existingExternal
+            result.copy(
+                candidate = result.candidate.copy(
+                    reviewSummary = if (sources.isEmpty()) {
+                        null
+                    } else {
+                        ExploreReviewSummary(
+                            averageRating = internalSource?.averageRating ?: sources.mapNotNull { it.averageRating }.average(),
+                            totalCount = sources.sumOf { it.reviewCount },
+                            internalAverageRating = internalSource?.averageRating,
+                            internalCount = internalSource?.reviewCount ?: 0,
+                            summary = internalSource?.summary ?: sources.firstNotNullOfOrNull { it.summary },
+                            sources = sources
+                        )
+                    }
+                )
+            )
+        }
+        _uiState.value = _uiState.value.copy(explore = _uiState.value.explore.copy(results = updatedResults))
+    }
+
     private fun searchMessageFor(source: FetchSource, fallbackFailure: NetworkFailure?): String? {
         return when {
             source == FetchSource.CACHE && fallbackFailure != null -> "Showing cached search results because ${networkReasonLabel(fallbackFailure)}."
@@ -784,6 +969,8 @@ data class AppUiState(
     val settings: SettingsModel = SettingsModel(),
     val visitHistory: List<VisitHistoryEntry> = emptyList(),
     val explore: ExploreUiState = ExploreUiState(),
+    val placeDetail: PlaceDetailUiState = PlaceDetailUiState(),
+    val reviewCompose: ReviewComposeUiState = ReviewComposeUiState(),
     val voiceAssistant: VoiceAssistantUiState = VoiceAssistantUiState()
 )
 
