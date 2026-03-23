@@ -48,6 +48,22 @@ import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.service.AndroidNavigationForegroundServiceController
 import com.simonsaysgps.service.WorkManagerNavigationSessionOrchestrator
 import com.simonsaysgps.service.AndroidVoicePromptManager
+import com.simonsaysgps.data.repository.voice.InMemoryCrowdReportRepository
+import com.simonsaysgps.data.repository.voice.InMemoryReviewDraftRepository
+import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
+import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
+import com.simonsaysgps.domain.service.voice.MusicIntentProvider
+import com.simonsaysgps.domain.service.voice.ProseCleanupService
+import com.simonsaysgps.domain.service.voice.SpeechCaptureManager
+import com.simonsaysgps.domain.service.voice.VoiceActionDispatcher
+import com.simonsaysgps.domain.service.voice.VoiceAssistantManager
+import com.simonsaysgps.domain.service.voice.VoiceIntentParser
+import com.simonsaysgps.service.voice.DefaultVoiceActionDispatcher
+import com.simonsaysgps.service.voice.DefaultVoiceAssistantManager
+import com.simonsaysgps.service.voice.DemoMusicIntentProvider
+import com.simonsaysgps.service.voice.RuleBasedVoiceIntentParser
+import com.simonsaysgps.service.voice.StubProseCleanupService
+import com.simonsaysgps.service.voice.StubSpeechCaptureManager
 import com.squareup.moshi.Moshi
 import dagger.Binds
 import dagger.Module
@@ -184,6 +200,30 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindVisitHistoryRepository(impl: DataStoreVisitHistoryRepository): VisitHistoryRepository
+
+    @Binds
+    abstract fun bindCrowdReportRepository(impl: InMemoryCrowdReportRepository): CrowdReportRepository
+
+    @Binds
+    abstract fun bindReviewDraftRepository(impl: InMemoryReviewDraftRepository): ReviewDraftRepository
+
+    @Binds
+    abstract fun bindSpeechCaptureManager(impl: StubSpeechCaptureManager): SpeechCaptureManager
+
+    @Binds
+    abstract fun bindVoiceIntentParser(impl: RuleBasedVoiceIntentParser): VoiceIntentParser
+
+    @Binds
+    abstract fun bindVoiceActionDispatcher(impl: DefaultVoiceActionDispatcher): VoiceActionDispatcher
+
+    @Binds
+    abstract fun bindVoiceAssistantManager(impl: DefaultVoiceAssistantManager): VoiceAssistantManager
+
+    @Binds
+    abstract fun bindProseCleanupService(impl: StubProseCleanupService): ProseCleanupService
+
+    @Binds
+    abstract fun bindMusicIntentProvider(impl: DemoMusicIntentProvider): MusicIntentProvider
 
     @Binds
     abstract fun bindVoicePromptManager(impl: AndroidVoicePromptManager): VoicePromptManager

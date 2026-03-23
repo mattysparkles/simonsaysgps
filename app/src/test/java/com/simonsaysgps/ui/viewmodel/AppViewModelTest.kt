@@ -18,16 +18,26 @@ import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.RouteManeuver
 import com.simonsaysgps.domain.model.SettingsModel
 import com.simonsaysgps.domain.model.explore.ExploreCategory
+import com.simonsaysgps.domain.model.voice.CrowdReport
+import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
+import com.simonsaysgps.domain.model.voice.ReviewDraft
+import com.simonsaysgps.domain.model.voice.SpeechCaptureState
+import com.simonsaysgps.domain.model.voice.VoiceContext
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreQuery
 import com.simonsaysgps.domain.model.explore.ExploreResponse
 import com.simonsaysgps.domain.model.explore.ExploreResult
 import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
+import com.simonsaysgps.domain.service.voice.VoiceAssistantManager
+import com.simonsaysgps.domain.service.voice.VoiceDispatchResult
 import com.simonsaysgps.domain.model.TurnType
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
+import com.simonsaysgps.domain.repository.VisitHistoryRepository
+import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
+import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.PromptFactory
@@ -40,8 +50,10 @@ import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -261,7 +273,11 @@ class AppViewModelTest {
             voicePromptManager = voicePromptManager,
             navigationForegroundServiceController = serviceController,
             navigationSessionOrchestrator = navigationSessionOrchestrator,
-            exploreOrchestrator = exploreOrchestrator
+            exploreOrchestrator = FakeExploreOrchestrator(),
+            visitHistoryRepository = FakeVisitHistoryRepository(),
+            crowdReportRepository = FakeCrowdReportRepository(),
+            reviewDraftRepository = FakeReviewDraftRepository(),
+            voiceAssistantManager = FakeVoiceAssistantManager()
         )
 
         viewModel.onLocationPermissionResult(true)
@@ -285,7 +301,11 @@ class AppViewModelTest {
         geocodingRepository: GeocodingRepository = FakeGeocodingRepository(),
         recentDestinationRepository: RecentDestinationRepository = FakeRecentDestinationRepository(),
         navigationSessionOrchestrator: FakeNavigationSessionOrchestrator = FakeNavigationSessionOrchestrator(),
-        exploreOrchestrator: ExploreOrchestrator = FakeExploreOrchestrator()
+        exploreOrchestrator: ExploreOrchestrator = FakeExploreOrchestrator(),
+        visitHistoryRepository: VisitHistoryRepository = FakeVisitHistoryRepository(),
+        crowdReportRepository: CrowdReportRepository = FakeCrowdReportRepository(),
+        reviewDraftRepository: ReviewDraftRepository = FakeReviewDraftRepository(),
+        voiceAssistantManager: VoiceAssistantManager = FakeVoiceAssistantManager()
     ): AppViewModel {
         val routingRepository = mockk<RoutingRepository>()
         val fusedLocationRepository = mockk<FusedLocationRepository>()
@@ -313,7 +333,11 @@ class AppViewModelTest {
             voicePromptManager = voicePromptManager,
             navigationForegroundServiceController = serviceController,
             navigationSessionOrchestrator = navigationSessionOrchestrator,
-            exploreOrchestrator = FakeExploreOrchestrator()
+            exploreOrchestrator = exploreOrchestrator,
+            visitHistoryRepository = visitHistoryRepository,
+            crowdReportRepository = crowdReportRepository,
+            reviewDraftRepository = reviewDraftRepository,
+            voiceAssistantManager = voiceAssistantManager
         )
     }
 
@@ -462,4 +486,43 @@ class AppViewModelTest {
             stopReasons += reason
         }
     }
+
+
+    private class FakeVisitHistoryRepository : VisitHistoryRepository {
+        override val visitHistory = MutableStateFlow<List<VisitHistoryEntry>>(emptyList())
+        override suspend fun record(entry: VisitHistoryEntry) { visitHistory.value = listOf(entry) + visitHistory.value }
+        override suspend fun remove(placeId: String) { visitHistory.value = visitHistory.value.filterNot { it.placeId == placeId } }
+        override suspend fun clear() { visitHistory.value = emptyList() }
+    }
+
+    private class FakeCrowdReportRepository : CrowdReportRepository {
+        override val reports = MutableStateFlow<List<CrowdReport>>(emptyList())
+        override val pendingReport = MutableStateFlow<CrowdReport?>(null)
+        override suspend fun stage(report: CrowdReport) { pendingReport.value = report }
+        override suspend fun confirmPending() {
+            pendingReport.value?.let { reports.value = listOf(it.copy(userConfirmed = true)) + reports.value }
+            pendingReport.value = null
+        }
+        override suspend fun dismissPending(reason: String?) { pendingReport.value = null }
+    }
+
+    private class FakeReviewDraftRepository : ReviewDraftRepository {
+        override val activeDraft = MutableStateFlow<ReviewDraft?>(null)
+        override suspend fun startDraft(draft: ReviewDraft) { activeDraft.value = draft }
+        override suspend fun updateRawTranscript(transcript: String) { activeDraft.value = activeDraft.value?.copy(rawTranscript = transcript) }
+        override suspend fun applyCleanupSuggestion(option: ReviewCleanupOption, suggestion: String?) {
+            activeDraft.value = activeDraft.value?.copy(selectedCleanupOption = option, cleanedSuggestion = suggestion)
+        }
+        override suspend fun approveFinalText(text: String) { activeDraft.value = activeDraft.value?.copy(finalApprovedText = text) }
+        override suspend fun clearDraft() { activeDraft.value = null }
+    }
+
+    private class FakeVoiceAssistantManager : VoiceAssistantManager {
+        override val captureState: StateFlow<SpeechCaptureState> = MutableStateFlow(SpeechCaptureState.Idle)
+        override suspend fun handleTranscript(transcript: String, context: VoiceContext): VoiceDispatchResult =
+            VoiceDispatchResult.NoOp("Handled: $transcript")
+        override fun startListening() = Unit
+        override fun stopListening() = Unit
+    }
+
 }

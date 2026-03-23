@@ -244,6 +244,46 @@ Still future work:
 
 **No binary files were added in this PR.**
 
+
+## Voice assistant input layer
+
+This PR adds a **voice-first input architecture** that complements the existing TTS/navigation stack instead of replacing it.
+
+### Implemented now
+
+- A dedicated voice input domain stack with `VoiceAssistantManager`, `SpeechCaptureManager`, `VoiceIntentParser`, `VoiceActionDispatcher`, `CrowdReportRepository`, `ReviewDraftRepository`, `ProseCleanupService`, and `MusicIntentProvider` abstractions.
+- A new **Voice Assistant** UI entry point from the map screen with large controls for typed/manual command entry, passenger-friendly reporting, review dictation drafting, and soundtrack intent scaffolding.
+- Transcript handling that keeps the **raw transcript**, **interpreted intent**, and **resulting action** separate.
+- Voice/reporting support for commands in the spirit of:
+  - “Simon, find coffee on my way”
+  - “Simon, take me somewhere fun nearby”
+  - “Simon, report speed trap / police / traffic / accident / pothole / roadwork / disabled vehicle / something awesome”
+  - “Simon, leave a review for this place”
+  - “Simon, make me a spooky road trip playlist”
+- Structured crowd reports with timestamp, location, report type, transcript note, confidence, explicit confirmation state, and moderation status fields.
+- Voice review drafts that preserve raw dictated text, optional cleanup suggestions, and final approved text separately.
+- Settings toggles for microphone/voice assistant enablement, spoken confirmations, hands-free reporting, AI cleanup opt-in, and soundtrack integration scaffolding.
+
+### Scaffolded only in this phase
+
+- real always-listening wake words
+- provider-backed speech recognition
+- external review publishing
+- provider-specific AI prose cleanup
+- live Spotify/Apple Music/YouTube Music/Pandora SDK integrations
+- automatic emergency escalation
+
+### Permissions, privacy, and limitations
+
+- `RECORD_AUDIO` is now requested for user-initiated voice capture.
+- Voice capture is **not** always listening in this PR.
+- Crowd reports and review drafts are staged locally in-memory in this implementation.
+- Crowd reports require an explicit confirmation step before submission.
+- Soundtrack requests are routed through a provider-agnostic abstraction and currently return a demo/stub response.
+- See [`docs/voice_assistant.md`](docs/voice_assistant.md) for the detailed implementation/scaffolding breakdown.
+
+**No binary files were added in this PR.**
+
 ## Simon Says rules
 
 ### Basic mode

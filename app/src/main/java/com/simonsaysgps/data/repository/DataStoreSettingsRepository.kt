@@ -22,6 +22,7 @@ import com.simonsaysgps.domain.model.explore.AccessiblePlacesPreference
 import com.simonsaysgps.domain.model.explore.ExploreSettings
 import com.simonsaysgps.domain.model.explore.ExploreSuggestionCount
 import com.simonsaysgps.domain.model.explore.QuietPreferenceStrictness
+import com.simonsaysgps.domain.model.voice.VoiceAssistantSettings
 import com.simonsaysgps.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -88,6 +89,12 @@ class DataStoreSettingsRepository @Inject constructor(
             prefs[EXPLORE_AVOID_ALCOHOL] = updated.exploreSettings.avoidAlcoholFocusedVenues
             prefs[EXPLORE_AVOID_ADULT] = updated.exploreSettings.avoidAdultOrientedVenues
             prefs[EXPLORE_WALKTHROUGH_SEEN] = updated.exploreSettings.walkthroughSeen
+            prefs[VOICE_ASSISTANT_ENABLED] = updated.voiceAssistantSettings.enabled
+            prefs[HANDS_FREE_REPORTING_ENABLED] = updated.voiceAssistantSettings.handsFreeReportingEnabled
+            prefs[VOICE_CONFIRMATION_REQUIRED] = updated.voiceAssistantSettings.voiceConfirmationRequired
+            prefs[VOICE_AI_CLEANUP_OPT_IN] = updated.voiceAssistantSettings.aiCleanupOptIn
+            prefs[SOUNDTRACK_INTEGRATION_ENABLED] = updated.voiceAssistantSettings.soundtrackIntegrationEnabled
+            prefs[SPOKEN_CONFIRMATIONS_ENABLED] = updated.voiceAssistantSettings.spokenConfirmationsEnabled
         }
     }
 
@@ -137,6 +144,14 @@ class DataStoreSettingsRepository @Inject constructor(
             avoidAlcoholFocusedVenues = this[EXPLORE_AVOID_ALCOHOL] ?: true,
             avoidAdultOrientedVenues = this[EXPLORE_AVOID_ADULT] ?: true,
             walkthroughSeen = this[EXPLORE_WALKTHROUGH_SEEN] ?: false
+        ),
+        voiceAssistantSettings = VoiceAssistantSettings(
+            enabled = this[VOICE_ASSISTANT_ENABLED] ?: true,
+            handsFreeReportingEnabled = this[HANDS_FREE_REPORTING_ENABLED] ?: true,
+            voiceConfirmationRequired = this[VOICE_CONFIRMATION_REQUIRED] ?: true,
+            aiCleanupOptIn = this[VOICE_AI_CLEANUP_OPT_IN] ?: false,
+            soundtrackIntegrationEnabled = this[SOUNDTRACK_INTEGRATION_ENABLED] ?: false,
+            spokenConfirmationsEnabled = this[SPOKEN_CONFIRMATIONS_ENABLED] ?: true
         )
     )
 
@@ -196,5 +211,11 @@ class DataStoreSettingsRepository @Inject constructor(
         val EXPLORE_AVOID_ALCOHOL = booleanPreferencesKey("explore_avoid_alcohol")
         val EXPLORE_AVOID_ADULT = booleanPreferencesKey("explore_avoid_adult")
         val EXPLORE_WALKTHROUGH_SEEN = booleanPreferencesKey("explore_walkthrough_seen")
+        val VOICE_ASSISTANT_ENABLED = booleanPreferencesKey("voice_assistant_enabled")
+        val HANDS_FREE_REPORTING_ENABLED = booleanPreferencesKey("hands_free_reporting_enabled")
+        val VOICE_CONFIRMATION_REQUIRED = booleanPreferencesKey("voice_confirmation_required")
+        val VOICE_AI_CLEANUP_OPT_IN = booleanPreferencesKey("voice_ai_cleanup_opt_in")
+        val SOUNDTRACK_INTEGRATION_ENABLED = booleanPreferencesKey("soundtrack_integration_enabled")
+        val SPOKEN_CONFIRMATIONS_ENABLED = booleanPreferencesKey("spoken_confirmations_enabled")
     }
 }

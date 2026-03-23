@@ -26,6 +26,12 @@ class MainActivity : ComponentActivity() {
         viewModel.onLocationPermissionResult(granted)
     }
 
+    private val microphonePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        viewModel.onMicrophonePermissionResult(granted)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen().setKeepOnScreenCondition { viewModel.uiState.value.isLoading }
         super.onCreate(savedInstanceState)
@@ -35,7 +41,8 @@ class MainActivity : ComponentActivity() {
             SimonSaysGpsTheme {
                 SimonSaysNavHost(
                     appViewModel = viewModel,
-                    requestLocationPermission = ::requestLocationPermission
+                    requestLocationPermission = ::requestLocationPermission,
+                    requestMicrophonePermission = ::requestMicrophonePermission
                 )
             }
         }
@@ -50,5 +57,9 @@ class MainActivity : ComponentActivity() {
             }
         }.toTypedArray()
         locationPermissionLauncher.launch(permissions)
+    }
+
+    private fun requestMicrophonePermission() {
+        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 }

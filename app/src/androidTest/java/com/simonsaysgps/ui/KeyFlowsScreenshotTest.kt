@@ -60,6 +60,7 @@ class KeyFlowsScreenshotTest {
                     onPreviewRoute = {},
                     onSettingsClick = {},
                     onExploreClick = {},
+                    onVoiceAssistantClick = {},
                     onRequestLocationPermission = {},
                     onRemoveRecentDestination = {},
                     onClearRecentDestinations = {},

@@ -1,6 +1,7 @@
 package com.simonsaysgps.domain.model
 
 import com.simonsaysgps.domain.model.explore.ExploreSettings
+import com.simonsaysgps.domain.model.voice.VoiceAssistantSettings
 
 data class SettingsModel(
     val voiceEnabled: Boolean = true,
@@ -12,5 +13,6 @@ data class SettingsModel(
     val debugMode: Boolean = false,
     val demoMode: Boolean = true,
     val routingPreferences: RoutingPreferences = RoutingPreferences(),
-    val exploreSettings: ExploreSettings = ExploreSettings()
+    val exploreSettings: ExploreSettings = ExploreSettings(),
+    val voiceAssistantSettings: VoiceAssistantSettings = VoiceAssistantSettings()
 )
