@@ -9,6 +9,7 @@ import com.simonsaysgps.ui.screen.ActiveNavigationScreen
 import com.simonsaysgps.ui.screen.MapSearchScreen
 import com.simonsaysgps.ui.screen.RoutePreviewScreen
 import com.simonsaysgps.ui.screen.SettingsScreen
+import com.simonsaysgps.ui.screen.voice.VoiceAssistantScreen
 import com.simonsaysgps.ui.screen.SplashScreen
 import com.simonsaysgps.ui.screen.explore.ExploreResultsScreen
 import com.simonsaysgps.ui.screen.explore.ExploreScreen
@@ -18,7 +19,8 @@ import com.simonsaysgps.ui.viewmodel.AppViewModel
 @Composable
 fun SimonSaysNavHost(
     appViewModel: AppViewModel = hiltViewModel(),
-    requestLocationPermission: () -> Unit
+    requestLocationPermission: () -> Unit,
+    requestMicrophonePermission: () -> Unit
 ) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = Screen.Splash.route) {
@@ -31,6 +33,7 @@ fun SimonSaysNavHost(
                 onRouteReady = { navController.navigate(Screen.RoutePreview.route) },
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
                 onExploreClick = { navController.navigate(Screen.Explore.route) },
+                onVoiceAssistantClick = { navController.navigate(Screen.VoiceAssistant.route) },
                 requestLocationPermission = requestLocationPermission
             )
         }
@@ -76,6 +79,13 @@ fun SimonSaysNavHost(
             SettingsScreen(
                 viewModel = appViewModel,
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.VoiceAssistant.route) {
+            VoiceAssistantScreen(
+                viewModel = appViewModel,
+                onBack = { navController.popBackStack() },
+                requestMicrophonePermission = requestMicrophonePermission
             )
         }
     }

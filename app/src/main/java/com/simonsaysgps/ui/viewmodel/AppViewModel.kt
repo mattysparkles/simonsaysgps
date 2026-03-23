@@ -22,16 +22,26 @@ import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreQuery
 import com.simonsaysgps.domain.model.explore.ExploreResult
 import com.simonsaysgps.domain.model.explore.ExploreSettings
+import com.simonsaysgps.domain.model.voice.CrowdReport
+import com.simonsaysgps.domain.model.voice.CrowdReportType
+import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
+import com.simonsaysgps.domain.model.voice.ReviewDraft
+import com.simonsaysgps.domain.model.voice.SpeechCaptureState
+import com.simonsaysgps.domain.model.voice.VoiceContext
 import com.simonsaysgps.domain.repository.GeocodingRepository
 import com.simonsaysgps.domain.repository.RecentDestinationRepository
 import com.simonsaysgps.domain.repository.RoutingRepository
 import com.simonsaysgps.domain.repository.SettingsRepository
 import com.simonsaysgps.domain.repository.VisitHistoryRepository
+import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
+import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.NavigationForegroundServiceController
 import com.simonsaysgps.domain.service.NavigationSessionOrchestrator
 import com.simonsaysgps.domain.service.RoutingSupportAdvisor
 import com.simonsaysgps.domain.service.VoicePromptManager
 import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
+import com.simonsaysgps.domain.service.voice.VoiceAssistantManager
+import com.simonsaysgps.domain.service.voice.VoiceDispatchResult
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -58,7 +68,10 @@ class AppViewModel @Inject constructor(
     private val navigationForegroundServiceController: NavigationForegroundServiceController,
     private val navigationSessionOrchestrator: NavigationSessionOrchestrator,
     private val exploreOrchestrator: ExploreOrchestrator,
-    private val visitHistoryRepository: VisitHistoryRepository
+    private val visitHistoryRepository: VisitHistoryRepository,
+    private val crowdReportRepository: CrowdReportRepository,
+    private val reviewDraftRepository: ReviewDraftRepository,
+    private val voiceAssistantManager: VoiceAssistantManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AppUiState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -119,11 +132,45 @@ class AppViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(visitHistory = visits)
             }
         }
+        viewModelScope.launch {
+            crowdReportRepository.reports.collect { reports ->
+                _uiState.value = _uiState.value.copy(
+                    voiceAssistant = _uiState.value.voiceAssistant.copy(submittedReports = reports)
+                )
+            }
+        }
+        viewModelScope.launch {
+            crowdReportRepository.pendingReport.collect { pending ->
+                _uiState.value = _uiState.value.copy(
+                    voiceAssistant = _uiState.value.voiceAssistant.copy(pendingReport = pending)
+                )
+            }
+        }
+        viewModelScope.launch {
+            reviewDraftRepository.activeDraft.collect { draft ->
+                _uiState.value = _uiState.value.copy(
+                    voiceAssistant = _uiState.value.voiceAssistant.copy(activeReviewDraft = draft)
+                )
+            }
+        }
+        viewModelScope.launch {
+            voiceAssistantManager.captureState.collect { captureState ->
+                _uiState.value = _uiState.value.copy(
+                    voiceAssistant = _uiState.value.voiceAssistant.copy(captureState = captureState)
+                )
+            }
+        }
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
         _uiState.value = _uiState.value.copy(hasLocationPermission = granted, isLoading = false)
         if (granted) startLocationUpdates()
+    }
+
+    fun onMicrophonePermissionResult(granted: Boolean) {
+        _uiState.value = _uiState.value.copy(
+            voiceAssistant = _uiState.value.voiceAssistant.copy(hasMicrophonePermission = granted)
+        )
     }
 
     fun updateSearchQuery(query: String) {
@@ -355,6 +402,81 @@ class AppViewModel @Inject constructor(
         noteExploreAction("Cleared your Explore home anchor.")
     }
 
+    fun updateVoiceTranscript(transcript: String) {
+        _uiState.value = _uiState.value.copy(
+            voiceAssistant = _uiState.value.voiceAssistant.copy(draftTranscript = transcript)
+        )
+    }
+
+    fun startVoiceCapture() {
+        voiceAssistantManager.startListening()
+    }
+
+    fun stopVoiceCapture() {
+        voiceAssistantManager.stopListening()
+    }
+
+    fun submitVoiceTranscript() {
+        val transcript = _uiState.value.voiceAssistant.draftTranscript
+        if (!_uiState.value.settings.voiceAssistantSettings.enabled) {
+            _uiState.value = _uiState.value.copy(
+                voiceAssistant = _uiState.value.voiceAssistant.copy(lastActionMessage = "Voice assistant input is disabled in Settings.")
+            )
+            return
+        }
+        if (transcript.isBlank()) return
+        viewModelScope.launch {
+            val result = voiceAssistantManager.handleTranscript(transcript, currentVoiceContext())
+            _uiState.value = _uiState.value.copy(
+                voiceAssistant = _uiState.value.voiceAssistant.copy(lastTranscript = transcript, draftTranscript = "")
+            )
+            applyVoiceDispatchResult(result)
+        }
+    }
+
+    fun stageManualReport(type: CrowdReportType) {
+        updateVoiceTranscript("report ${type.label.lowercase()}")
+        submitVoiceTranscript()
+    }
+
+    fun confirmPendingVoiceAction(accepted: Boolean) {
+        viewModelScope.launch {
+            applyVoiceDispatchResult(
+                voiceAssistantManager.handleTranscript(if (accepted) "yes" else "no", currentVoiceContext())
+            )
+        }
+    }
+
+    fun startReviewDraft() {
+        updateVoiceTranscript("leave a review for this place")
+        submitVoiceTranscript()
+    }
+
+    fun updateReviewDraftTranscript(transcript: String) {
+        viewModelScope.launch { reviewDraftRepository.updateRawTranscript(transcript) }
+    }
+
+    fun applyReviewCleanup(option: ReviewCleanupOption) {
+        viewModelScope.launch {
+            applyVoiceDispatchResult(
+                voiceAssistantManager.handleTranscript(option.label, currentVoiceContext())
+            )
+        }
+    }
+
+    fun approveReviewDraft(text: String) {
+        viewModelScope.launch {
+            reviewDraftRepository.approveFinalText(text)
+            _uiState.value = _uiState.value.copy(
+                voiceAssistant = _uiState.value.voiceAssistant.copy(lastActionMessage = "Review saved locally and marked as approved.")
+            )
+        }
+    }
+
+    fun clearReviewDraft() {
+        viewModelScope.launch { reviewDraftRepository.clearDraft() }
+    }
+
     private suspend fun performSearch(query: String) {
         if (query.isBlank() || query != _uiState.value.searchQuery) return
         _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null, searchInfo = null, searchStatus = SearchStatus.LOADING)
@@ -575,6 +697,43 @@ class AppViewModel @Inject constructor(
         NetworkFailureType.UNKNOWN -> "the latest network request failed"
     }
 
+    private fun currentVoiceContext(): VoiceContext = VoiceContext(
+        currentLocation = _uiState.value.currentLocation?.coordinate,
+        selectedPlace = _uiState.value.selectedPlace,
+        navigationActive = _uiState.value.navigationState.navigationActive
+    )
+
+    private fun applyVoiceDispatchResult(result: VoiceDispatchResult) {
+        val message = when (result) {
+            is VoiceDispatchResult.Search -> {
+                _uiState.value = _uiState.value.copy(searchQuery = result.query)
+                search()
+                result.spokenConfirmation
+            }
+            is VoiceDispatchResult.Explore -> {
+                val category = when {
+                    result.spokenConfirmation.contains("fun", ignoreCase = true) -> ExploreCategory.FUN
+                    result.spokenConfirmation.contains("delicious", ignoreCase = true) -> ExploreCategory.DELICIOUS
+                    else -> ExploreCategory.ON_MY_WAY
+                }
+                loadExplore(category)
+                result.spokenConfirmation
+            }
+            is VoiceDispatchResult.ReportStaged -> result.spokenConfirmation
+            is VoiceDispatchResult.ReportSubmitted -> result.spokenConfirmation
+            is VoiceDispatchResult.ReviewStarted -> result.spokenConfirmation
+            is VoiceDispatchResult.ReviewUpdated -> result.spokenConfirmation
+            is VoiceDispatchResult.SoundtrackQueued -> result.result.message
+            is VoiceDispatchResult.NoOp -> result.spokenConfirmation
+        }
+        if (_uiState.value.settings.voiceAssistantSettings.spokenConfirmationsEnabled) {
+            voicePromptManager.speak(message)
+        }
+        _uiState.value = _uiState.value.copy(
+            voiceAssistant = _uiState.value.voiceAssistant.copy(lastActionMessage = message)
+        )
+    }
+
     companion object {
         private const val TAG = "AppViewModel"
         internal const val SEARCH_DEBOUNCE_MS = 400L
@@ -591,6 +750,17 @@ data class ExploreUiState(
     val actionMessage: String? = null,
     val autoPicked: Boolean = false,
     val walkthroughVisible: Boolean = true
+)
+
+data class VoiceAssistantUiState(
+    val hasMicrophonePermission: Boolean = false,
+    val captureState: SpeechCaptureState = SpeechCaptureState.Idle,
+    val draftTranscript: String = "",
+    val lastTranscript: String? = null,
+    val lastActionMessage: String? = null,
+    val pendingReport: CrowdReport? = null,
+    val submittedReports: List<CrowdReport> = emptyList(),
+    val activeReviewDraft: ReviewDraft? = null
 )
 
 data class AppUiState(
@@ -613,7 +783,8 @@ data class AppUiState(
     val lastPrompt: String? = null,
     val settings: SettingsModel = SettingsModel(),
     val visitHistory: List<VisitHistoryEntry> = emptyList(),
-    val explore: ExploreUiState = ExploreUiState()
+    val explore: ExploreUiState = ExploreUiState(),
+    val voiceAssistant: VoiceAssistantUiState = VoiceAssistantUiState()
 )
 
 enum class SearchStatus {

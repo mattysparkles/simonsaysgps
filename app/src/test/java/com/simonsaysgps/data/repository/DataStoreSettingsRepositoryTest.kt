@@ -68,4 +68,27 @@ class DataStoreSettingsRepositoryTest {
         assertThat(persisted.exploreSettings.visitHistoryRetentionDays).isEqualTo(90)
         assertThat(persisted.exploreSettings.closeToHomeRadiusMiles).isEqualTo(12)
     }
+    @Test
+    fun `voice assistant preferences persist safety toggles`() = runTest {
+        repository.update { current ->
+            current.copy(
+                voiceAssistantSettings = current.voiceAssistantSettings.copy(
+                    enabled = true,
+                    handsFreeReportingEnabled = true,
+                    voiceConfirmationRequired = false,
+                    aiCleanupOptIn = true,
+                    soundtrackIntegrationEnabled = true,
+                    spokenConfirmationsEnabled = false
+                )
+            )
+        }
+
+        val persisted = repository.settings.first()
+
+        assertThat(persisted.voiceAssistantSettings.voiceConfirmationRequired).isFalse()
+        assertThat(persisted.voiceAssistantSettings.aiCleanupOptIn).isTrue()
+        assertThat(persisted.voiceAssistantSettings.soundtrackIntegrationEnabled).isTrue()
+        assertThat(persisted.voiceAssistantSettings.spokenConfirmationsEnabled).isFalse()
+    }
+
 }

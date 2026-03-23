@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,6 +53,7 @@ fun MapSearchScreen(
     onRouteReady: () -> Unit,
     onSettingsClick: () -> Unit,
     onExploreClick: () -> Unit,
+    onVoiceAssistantClick: () -> Unit,
     requestLocationPermission: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -66,6 +68,7 @@ fun MapSearchScreen(
         },
         onSettingsClick = onSettingsClick,
         onExploreClick = onExploreClick,
+        onVoiceAssistantClick = onVoiceAssistantClick,
         onRequestLocationPermission = requestLocationPermission,
         onRemoveRecentDestination = viewModel::removeRecentDestination,
         onClearRecentDestinations = viewModel::clearRecentDestinations
@@ -82,6 +85,7 @@ fun MapSearchScreenContent(
     onPreviewRoute: () -> Unit,
     onSettingsClick: () -> Unit,
     onExploreClick: () -> Unit,
+    onVoiceAssistantClick: () -> Unit,
     onRequestLocationPermission: () -> Unit,
     onRemoveRecentDestination: (String) -> Unit,
     onClearRecentDestinations: () -> Unit,
@@ -99,7 +103,10 @@ fun MapSearchScreenContent(
         topBar = {
             TopAppBar(
                 title = { Text("Simon Says GPS") },
-                actions = { IconButton(onClick = onSettingsClick) { Icon(Icons.Default.Settings, contentDescription = null) } }
+                actions = {
+                    IconButton(onClick = onVoiceAssistantClick) { Icon(Icons.Default.Mic, contentDescription = "Voice assistant") }
+                    IconButton(onClick = onSettingsClick) { Icon(Icons.Default.Settings, contentDescription = null) }
+                }
             )
         },
         bottomBar = {
@@ -142,6 +149,7 @@ fun MapSearchScreenContent(
                 },
                 trailingIcon = { IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = null) } }
             )
+            Button(onClick = onVoiceAssistantClick, modifier = Modifier.fillMaxWidth()) { Text("Open voice assistant") }
             mapContent(Modifier.fillMaxWidth().height(280.dp))
             state.selectedPlace?.let {
                 Card(modifier = Modifier.fillMaxWidth()) {
