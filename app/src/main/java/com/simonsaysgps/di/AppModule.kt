@@ -40,6 +40,8 @@ import com.simonsaysgps.data.repository.explore.DataStoreInternalReviewRepositor
 import com.simonsaysgps.data.repository.explore.DataStoreSavedPlaceRepository
 import com.simonsaysgps.data.repository.explore.DefaultExploreRepository
 import com.simonsaysgps.data.repository.explore.DefaultPlaceDetailRepository
+import com.simonsaysgps.data.repository.voice.DataStoreCrowdReportRepository
+import com.simonsaysgps.data.repository.voice.DataStoreReviewDraftRepository
 import com.simonsaysgps.domain.repository.explore.EventProvider
 import com.simonsaysgps.domain.repository.explore.InternalReviewRepository
 import com.simonsaysgps.domain.repository.explore.PlaceDetailRepository
@@ -55,8 +57,6 @@ import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.service.AndroidNavigationForegroundServiceController
 import com.simonsaysgps.service.WorkManagerNavigationSessionOrchestrator
 import com.simonsaysgps.service.AndroidVoicePromptManager
-import com.simonsaysgps.data.repository.voice.InMemoryCrowdReportRepository
-import com.simonsaysgps.data.repository.voice.InMemoryReviewDraftRepository
 import com.simonsaysgps.domain.repository.voice.CrowdReportRepository
 import com.simonsaysgps.domain.repository.voice.ReviewDraftRepository
 import com.simonsaysgps.domain.service.voice.MusicIntentProvider
@@ -70,8 +70,9 @@ import com.simonsaysgps.service.voice.DefaultVoiceAssistantManager
 import com.simonsaysgps.service.voice.DemoMusicIntentProvider
 import com.simonsaysgps.service.voice.RuleBasedVoiceIntentParser
 import com.simonsaysgps.service.voice.StubProseCleanupService
-import com.simonsaysgps.service.voice.StubSpeechCaptureManager
+import com.simonsaysgps.service.voice.AndroidSpeechCaptureManager
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -101,7 +102,9 @@ object AppModule {
 object NetworkModule {
     @Provides
     @Singleton
-    fun provideMoshi(): Moshi = Moshi.Builder().build()
+    fun provideMoshi(): Moshi = Moshi.Builder()
+        .addLast(KotlinJsonAdapterFactory())
+        .build()
 
     @Provides
     @Singleton
@@ -209,13 +212,13 @@ abstract class RepositoryModule {
     abstract fun bindVisitHistoryRepository(impl: DataStoreVisitHistoryRepository): VisitHistoryRepository
 
     @Binds
-    abstract fun bindCrowdReportRepository(impl: InMemoryCrowdReportRepository): CrowdReportRepository
+    abstract fun bindCrowdReportRepository(impl: DataStoreCrowdReportRepository): CrowdReportRepository
 
     @Binds
-    abstract fun bindReviewDraftRepository(impl: InMemoryReviewDraftRepository): ReviewDraftRepository
+    abstract fun bindReviewDraftRepository(impl: DataStoreReviewDraftRepository): ReviewDraftRepository
 
     @Binds
-    abstract fun bindSpeechCaptureManager(impl: StubSpeechCaptureManager): SpeechCaptureManager
+    abstract fun bindSpeechCaptureManager(impl: AndroidSpeechCaptureManager): SpeechCaptureManager
 
     @Binds
     abstract fun bindVoiceIntentParser(impl: RuleBasedVoiceIntentParser): VoiceIntentParser

@@ -1,5 +1,6 @@
 package com.simonsaysgps.domain.service.voice
 
+import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
 import com.simonsaysgps.domain.model.voice.SoundtrackIntent
 import com.simonsaysgps.domain.model.voice.SoundtrackResult
@@ -29,7 +30,7 @@ interface MusicIntentProvider {
 
 sealed interface VoiceDispatchResult {
     data class Search(val query: String, val onMyWay: Boolean, val spokenConfirmation: String) : VoiceDispatchResult
-    data class Explore(val spokenConfirmation: String) : VoiceDispatchResult
+    data class Explore(val category: ExploreCategory, val spokenConfirmation: String) : VoiceDispatchResult
     data class ReportStaged(val spokenConfirmation: String) : VoiceDispatchResult
     data class ReportSubmitted(val spokenConfirmation: String) : VoiceDispatchResult
     data class ReviewStarted(val spokenConfirmation: String) : VoiceDispatchResult

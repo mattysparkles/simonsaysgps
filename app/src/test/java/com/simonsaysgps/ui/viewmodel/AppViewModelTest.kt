@@ -355,6 +355,69 @@ class AppViewModelTest {
         assertThat(viewModel.uiState.value.savedPlaces).isEmpty()
     }
 
+    @Test
+    fun `voice capture requires microphone permission and surfaces a helpful message`() = runTest(dispatcher) {
+        val voiceManager = FakeVoiceAssistantManager()
+        val viewModel = createViewModel(voiceAssistantManager = voiceManager)
+
+        viewModel.startVoiceCapture()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.voiceAssistant.lastActionMessage).contains("Grant microphone permission")
+        assertThat(voiceManager.startListeningCalls).isEqualTo(0)
+    }
+
+    @Test
+    fun `voice capture errors and transcripts feed the voice assistant ui state`() = runTest(dispatcher) {
+        val voiceManager = FakeVoiceAssistantManager()
+        val viewModel = createViewModel(voiceAssistantManager = voiceManager)
+        viewModel.onMicrophonePermissionResult(true)
+        advanceUntilIdle()
+
+        voiceManager.captureStateFlow.value = SpeechCaptureState.Error("Speech recognition hit a network problem.")
+        advanceUntilIdle()
+        assertThat(viewModel.uiState.value.voiceAssistant.lastActionMessage).contains("network problem")
+
+        voiceManager.captureStateFlow.value = SpeechCaptureState.TranscriptAvailable("Simon, report traffic")
+        advanceUntilIdle()
+        assertThat(viewModel.uiState.value.voiceAssistant.draftTranscript).isEqualTo("Simon, report traffic")
+    }
+
+    @Test
+    fun `voice dispatch drives explore and review state updates`() = runTest(dispatcher) {
+        val reviewDraftRepository = FakeReviewDraftRepository()
+        val voiceManager = FakeVoiceAssistantManager(
+            resultProvider = { transcript, _ ->
+                when (transcript) {
+                    "quiet places" -> VoiceDispatchResult.Explore(ExploreCategory.QUIET, "Opening quiet suggestions nearby.")
+                    "leave a review for this place" -> VoiceDispatchResult.ReviewStarted("Ready to draft a review.")
+                    else -> VoiceDispatchResult.NoOp("Unhandled")
+                }
+            }
+        )
+        val viewModel = createViewModel(
+            reviewDraftRepository = reviewDraftRepository,
+            voiceAssistantManager = voiceManager
+        )
+
+        viewModel.updateVoiceTranscript("quiet places")
+        viewModel.submitVoiceTranscript()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.explore.selectedCategory).isEqualTo(ExploreCategory.QUIET)
+        assertThat(viewModel.uiState.value.voiceAssistant.lastActionMessage).contains("quiet suggestions")
+
+        reviewDraftRepository.startDraft(ReviewDraft(id = "draft-1", place = destinationPlace()))
+        advanceUntilIdle()
+
+        viewModel.updateVoiceTranscript("leave a review for this place")
+        viewModel.submitVoiceTranscript()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.voiceAssistant.activeReviewDraft?.id).isEqualTo("draft-1")
+        assertThat(viewModel.uiState.value.voiceAssistant.lastActionMessage).contains("Ready to draft a review")
+    }
+
     private fun createViewModel(
         locationFlow: Flow<LocationSample> = MutableSharedFlow(extraBufferCapacity = 4),
         serviceController: NavigationForegroundServiceController = FakeNavigationForegroundServiceController(),
@@ -627,21 +690,42 @@ class AppViewModelTest {
     }
 
     private class FakeReviewDraftRepository : ReviewDraftRepository {
+        override val drafts = MutableStateFlow<List<ReviewDraft>>(emptyList())
         override val activeDraft = MutableStateFlow<ReviewDraft?>(null)
-        override suspend fun startDraft(draft: ReviewDraft) { activeDraft.value = draft }
-        override suspend fun updateRawTranscript(transcript: String) { activeDraft.value = activeDraft.value?.copy(rawTranscript = transcript) }
+        override suspend fun startDraft(draft: ReviewDraft) {
+            activeDraft.value = draft
+            drafts.value = listOf(draft)
+        }
+        override suspend fun updateRawTranscript(transcript: String) {
+            activeDraft.value = activeDraft.value?.copy(rawTranscript = transcript)
+            activeDraft.value?.let { active -> drafts.value = drafts.value.map { if (it.id == active.id) active else it } }
+        }
         override suspend fun applyCleanupSuggestion(option: ReviewCleanupOption, suggestion: String?) {
             activeDraft.value = activeDraft.value?.copy(selectedCleanupOption = option, cleanedSuggestion = suggestion)
+            activeDraft.value?.let { active -> drafts.value = drafts.value.map { if (it.id == active.id) active else it } }
         }
-        override suspend fun approveFinalText(text: String) { activeDraft.value = activeDraft.value?.copy(finalApprovedText = text) }
-        override suspend fun clearDraft() { activeDraft.value = null }
+        override suspend fun approveFinalText(text: String) {
+            activeDraft.value = activeDraft.value?.copy(finalApprovedText = text)
+            activeDraft.value?.let { active -> drafts.value = drafts.value.map { if (it.id == active.id) active else it } }
+        }
+        override suspend fun clearDraft() {
+            activeDraft.value = null
+        }
     }
 
-    private class FakeVoiceAssistantManager : VoiceAssistantManager {
-        override val captureState: StateFlow<SpeechCaptureState> = MutableStateFlow(SpeechCaptureState.Idle)
-        override suspend fun handleTranscript(transcript: String, context: VoiceContext): VoiceDispatchResult =
+    private class FakeVoiceAssistantManager(
+        private val resultProvider: suspend (String, VoiceContext) -> VoiceDispatchResult = { transcript, _ ->
             VoiceDispatchResult.NoOp("Handled: $transcript")
-        override fun startListening() = Unit
+        }
+    ) : VoiceAssistantManager {
+        val captureStateFlow = MutableStateFlow<SpeechCaptureState>(SpeechCaptureState.Idle)
+        var startListeningCalls: Int = 0
+        override val captureState: StateFlow<SpeechCaptureState> = captureStateFlow
+        override suspend fun handleTranscript(transcript: String, context: VoiceContext): VoiceDispatchResult =
+            resultProvider(transcript, context)
+        override fun startListening() {
+            startListeningCalls += 1
+        }
         override fun stopListening() = Unit
     }
 

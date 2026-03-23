@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.voice.CrowdReportType
 import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
+import com.simonsaysgps.domain.model.voice.ReviewDraftStatus
+import com.simonsaysgps.domain.model.voice.SpeechCaptureState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 import com.simonsaysgps.ui.viewmodel.VoiceAssistantUiState
 
@@ -96,9 +98,10 @@ fun VoiceAssistantScreenContent(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Driver-friendly voice input")
-                    Text("This layer keeps capture, transcript parsing, intent routing, confirmation, and final actions separate so it can grow without replacing the current TTS stack.")
+                    Text("Tap the microphone to dictate a single command, or type one manually. Simon only listens after you explicitly start capture from this screen.")
                     if (!state.hasMicrophonePermission) {
-                        Button(onClick = onRequestMicrophonePermission, modifier = Modifier.fillMaxWidth()) { Text("Grant microphone") }
+                        Button(onClick = onRequestMicrophonePermission, modifier = Modifier.fillMaxWidth()) { Text("Grant microphone for voice capture") }
+                        Text("No hidden always-listening behavior is enabled in this build.")
                     }
                     Text("Voice assistant enabled: $voiceEnabled")
                     Text("Voice confirmation required: $voiceConfirmationRequired")
@@ -114,10 +117,20 @@ fun VoiceAssistantScreenContent(
                         onValueChange = onTranscriptChanged,
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
-                        label = { Text("Example: Simon, report speed trap") }
+                        label = { Text("Example: Simon, report police ahead") },
+                        supportingText = {
+                            Text(
+                                when (state.captureState) {
+                                    SpeechCaptureState.Idle -> "Try: “find coffee on my way”, “take me somewhere fun”, or “leave a review for this place”."
+                                    SpeechCaptureState.Listening -> "Listening for one spoken command. Tap stop when you're done."
+                                    is SpeechCaptureState.TranscriptAvailable -> "Review the transcript, edit it if needed, then run the command."
+                                    is SpeechCaptureState.Error -> (state.captureState as SpeechCaptureState.Error).message
+                                }
+                            )
+                        }
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onStartListening, enabled = state.hasMicrophonePermission) { Text("Start listening") }
+                        Button(onClick = onStartListening) { Text(if (state.hasMicrophonePermission) "Tap to speak" else "Need microphone") }
                         Button(onClick = onStopListening) { Text("Stop") }
                         Button(onClick = onSubmitTranscript) { Text("Run command") }
                     }
@@ -155,6 +168,10 @@ fun VoiceAssistantScreenContent(
                     Text("Voice review drafting")
                     Button(onClick = onStartReview, modifier = Modifier.fillMaxWidth()) { Text("Start review draft") }
                     state.activeReviewDraft?.let { draft ->
+                        Text(
+                            draft.place?.let { "Drafting for ${it.name}" }
+                                ?: "Drafting locally. Pick a place before final review submission."
+                        )
                         OutlinedTextField(
                             value = draft.rawTranscript,
                             onValueChange = onReviewTranscriptChanged,
@@ -176,12 +193,19 @@ fun VoiceAssistantScreenContent(
                         draft.finalApprovedText?.let { Text("Approved text: $it") }
                         TextButton(onClick = onClearReview) { Text("Clear review draft") }
                     }
+                    val savedDrafts = state.savedReviewDrafts.filter { it.status == ReviewDraftStatus.APPROVED }
+                    if (savedDrafts.isNotEmpty()) {
+                        Text("Saved local drafts")
+                        savedDrafts.take(3).forEach { draft ->
+                            Text("• ${draft.place?.name ?: "Unassigned place"}: ${draft.finalApprovedText ?: draft.cleanedSuggestion ?: draft.rawTranscript}")
+                        }
+                    }
                 }
             }
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Soundtrack scaffolding")
-                    Text("Ask for vibes like 'make me a spooky road trip playlist' or 'make me a beach playlist'. This PR stores the intent and returns a demo provider response instead of invoking a proprietary SDK.")
+                    Text("Ask for vibes like 'make me a spooky road trip playlist' or 'make me a beach playlist'. Simon saves the request and explains that live music-provider handoff is still future work.")
                     RowToggle(label = "Ready for future provider deep links", checked = soundtrackEnabled)
                 }
             }

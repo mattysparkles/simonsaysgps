@@ -150,7 +150,7 @@ fun MapSearchScreenContent(
                 },
                 trailingIcon = { IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = null) } }
             )
-            Button(onClick = onVoiceAssistantClick, modifier = Modifier.fillMaxWidth()) { Text("Open voice assistant") }
+            Button(onClick = onVoiceAssistantClick, modifier = Modifier.fillMaxWidth()) { Text("Open voice assistant for speech, reports, and reviews") }
             mapContent(Modifier.fillMaxWidth().height(280.dp))
             state.selectedPlace?.let {
                 Card(modifier = Modifier.fillMaxWidth()) {
