@@ -17,7 +17,7 @@ Implemented pieces:
 - `ProseCleanupService` abstraction with a local stub cleanup implementation.
 - `MusicIntentProvider` abstraction with a demo soundtrack provider that stores the requested vibe without pretending a live provider SDK is wired up.
 - Compose UI for a clearer voice assistant entry point, microphone permission messaging, typed/manual command fallback, pending/submitted report visibility, and saved review draft visibility.
-- Settings hooks for microphone/voice assistant enablement, spoken confirmations, hands-free reporting toggle state, AI cleanup opt-in, and soundtrack scaffolding toggles.
+- Settings hooks for microphone/voice assistant enablement, spoken confirmations, hands-free reporting toggle state, AI cleanup opt-in, and soundtrack scaffolding toggles in non-release builds.
 
 ## What remains scaffolded only
 
@@ -44,7 +44,7 @@ The following areas are intentionally scaffolded and are not represented as prod
 - Crowd reports are staged first and still require explicit confirmation before submission.
 - Passenger-friendly tap targets remain available so riders do not need to dictate every report.
 - Native speech recognition depends on Android speech services being available on the device; typed transcript entry remains the fallback path.
-- Soundtrack/music requests are intentionally scaffolded and currently store intent plus messaging only.
+- Soundtrack/music requests are intentionally scaffolded and currently store intent plus messaging only. The release-safe surface now hides soundtrack-provider controls so the shipped experience stays focused on navigation, reports, and local review drafting.
 - Accident reporting does not contact emergency services.
 
 ## Example supported commands

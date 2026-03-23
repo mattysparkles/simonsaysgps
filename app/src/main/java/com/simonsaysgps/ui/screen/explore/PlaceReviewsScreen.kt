@@ -21,7 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.simonsaysgps.domain.model.explore.PlaceReviewTag
+import com.simonsaysgps.config.ReleaseSurface
 import com.simonsaysgps.ui.model.explore.PlaceDetailUiState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 import java.text.SimpleDateFormat
@@ -37,6 +37,7 @@ fun PlaceReviewsScreen(
     val state by viewModel.uiState.collectAsState()
     PlaceReviewsScreenContent(
         state = state.placeDetail,
+        showReviewModerationHooks = ReleaseSurface.fromBuildConfig().showReviewModerationHooks,
         onBack = onBack,
         onLeaveReview = {
             viewModel.startLeaveReview()
@@ -51,6 +52,7 @@ fun PlaceReviewsScreen(
 @Composable
 fun PlaceReviewsScreenContent(
     state: PlaceDetailUiState,
+    showReviewModerationHooks: Boolean,
     onBack: () -> Unit,
     onLeaveReview: () -> Unit,
     onRemoveOwnReview: (String) -> Unit,
@@ -91,7 +93,9 @@ fun PlaceReviewsScreenContent(
                                 review.tags.forEach { AssistChip(onClick = {}, label = { Text(it.label) }) }
                             }
                         }
-                        OutlinedButton(onClick = { onReportReview(review.authorDisplayName) }) { Text("Report review (hook)") }
+                        if (showReviewModerationHooks) {
+                            OutlinedButton(onClick = { onReportReview(review.authorDisplayName) }) { Text("Report review (hook)") }
+                        }
                         if (review.authorDisplayName == "Local driver") {
                             OutlinedButton(onClick = { onRemoveOwnReview(review.internalReviewId) }) { Text("Delete local review") }
                         }

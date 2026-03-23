@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.simonsaysgps.config.ReleaseSurface
 import com.simonsaysgps.domain.model.NavigationSessionState
 import com.simonsaysgps.domain.util.DistanceFormatter
 import com.simonsaysgps.ui.components.InfoCard
@@ -185,15 +186,15 @@ private fun EnRouteBannerContent(banner: ActiveNavigationBannerUiModel.EnRoute) 
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
-        LaneGuidanceSection(banner.laneGuidance)
+        LaneGuidanceSection(banner.laneGuidance, ReleaseSurface.fromBuildConfig().showLaneGuidancePlaceholder)
     }
 }
 
 @Composable
-private fun LaneGuidanceSection(model: LaneGuidanceUiModel) {
+private fun LaneGuidanceSection(model: LaneGuidanceUiModel, showPlaceholder: Boolean) {
     when (model) {
         LaneGuidanceUiModel.Hidden -> Unit
-        is LaneGuidanceUiModel.Placeholder -> Surface(
+        is LaneGuidanceUiModel.Placeholder -> if (showPlaceholder) Surface(
             shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {
@@ -204,7 +205,7 @@ private fun LaneGuidanceSection(model: LaneGuidanceUiModel) {
                 Text(text = model.title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 Text(text = model.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
+        } else Unit
         is LaneGuidanceUiModel.Ready -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = model.hint, style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

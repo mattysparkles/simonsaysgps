@@ -44,7 +44,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "RELEASE_SAFE_SURFACE", "false")
+        }
         release {
+            buildConfigField("boolean", "RELEASE_SAFE_SURFACE", "true")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -68,6 +68,16 @@ class DataStoreSettingsRepositoryTest {
         assertThat(persisted.exploreSettings.visitHistoryRetentionDays).isEqualTo(90)
         assertThat(persisted.exploreSettings.closeToHomeRadiusMiles).isEqualTo(12)
     }
+
+    @Test
+    fun `onboarding flag persists independently from release gating`() = runTest {
+        repository.update { current -> current.copy(onboardingSeen = true) }
+
+        val persisted = repository.settings.first()
+
+        assertThat(persisted.onboardingSeen).isTrue()
+    }
+
     @Test
     fun `voice assistant preferences persist safety toggles`() = runTest {
         repository.update { current ->

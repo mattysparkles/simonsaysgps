@@ -14,8 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -72,7 +72,8 @@ fun MapSearchScreen(
         onVoiceAssistantClick = onVoiceAssistantClick,
         onRequestLocationPermission = requestLocationPermission,
         onRemoveRecentDestination = viewModel::removeRecentDestination,
-        onClearRecentDestinations = viewModel::clearRecentDestinations
+        onClearRecentDestinations = viewModel::clearRecentDestinations,
+        onDismissOnboarding = viewModel::dismissOnboarding
     )
 }
 
@@ -90,6 +91,7 @@ fun MapSearchScreenContent(
     onRequestLocationPermission: () -> Unit,
     onRemoveRecentDestination: (String) -> Unit,
     onClearRecentDestinations: () -> Unit,
+    onDismissOnboarding: () -> Unit,
     mapContent: @Composable (Modifier) -> Unit = { modifier ->
         MapLibreMapView(
             modifier = modifier,
@@ -125,11 +127,24 @@ fun MapSearchScreenContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (!state.settings.onboardingSeen) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("How the Simon Says game works", style = MaterialTheme.typography.titleMedium)
+                        Text("1. Search for a destination and preview the route first.")
+                        Text("2. Once navigation starts, Simon highlights the next Simon-approved move instead of every possible turn.")
+                        Text("3. Keep following the approved move and the app reroutes if the joke goes too far.")
+                        Text("The goal is playful navigation, not surprise detours that feel broken.")
+                        TextButton(onClick = onDismissOnboarding) { Text("Let's drive") }
+                    }
+                }
+            }
             if (!state.hasLocationPermission) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Location permission is needed for real navigation.")
-                        Button(onClick = onRequestLocationPermission) { Text("Grant location") }
+                        Text("Location permission keeps Simon honest.", style = MaterialTheme.typography.titleMedium)
+                        Text("We use location only to place you on the route, time the next Simon Says instruction, and recover if you miss a turn. Without it, you can still browse destinations but not run live navigation.")
+                        Button(onClick = onRequestLocationPermission) { Text("Enable location for navigation") }
                     }
                 }
             }
@@ -144,19 +159,20 @@ fun MapSearchScreenContent(
                         SearchStatus.LOADING -> Text("Searching OpenStreetMap destinations…")
                         SearchStatus.ERROR -> Text(state.searchError ?: "Something went wrong while searching.")
                         SearchStatus.EMPTY -> Text(state.searchInfo ?: "No destinations matched that search.")
-                        SearchStatus.RECENTS -> Text("Recent destinations appear here when the search is empty.")
-                        SearchStatus.SUCCESS -> Text(state.searchInfo ?: "Select a destination to preview a route.")
+                        SearchStatus.RECENTS -> Text("Recent destinations and saved Explore picks appear here when the search is empty.")
+                        SearchStatus.SUCCESS -> Text(state.searchInfo ?: "Select a destination, then preview the route before Simon takes over.")
                     }
                 },
                 trailingIcon = { IconButton(onClick = onSearch) { Icon(Icons.Default.Search, contentDescription = null) } }
             )
-            Button(onClick = onVoiceAssistantClick, modifier = Modifier.fillMaxWidth()) { Text("Open voice assistant for speech, reports, and reviews") }
+            Button(onClick = onVoiceAssistantClick, modifier = Modifier.fillMaxWidth()) { Text("Open voice assistant for commands, reports, and local review drafts") }
             mapContent(Modifier.fillMaxWidth().height(280.dp))
             state.selectedPlace?.let {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(it.name, style = MaterialTheme.typography.titleMedium)
                         Text(it.fullAddress, style = MaterialTheme.typography.bodyMedium)
+                        Text("Preview the route to learn Simon's first approved move before you start driving.", style = MaterialTheme.typography.bodySmall)
                         Button(onClick = onPreviewRoute, modifier = Modifier.padding(top = 8.dp)) {
                             Text("Preview route")
                         }
@@ -222,7 +238,7 @@ private fun SearchResultsSection(
 
         SearchStatus.EMPTY -> MessageCard(
             modifier = modifier,
-            title = "No matches",
+            title = "No matches yet",
             body = searchInfo ?: "Try a broader place name, city, or street address."
         )
 
@@ -238,8 +254,8 @@ private fun SearchResultsSection(
             if (recentDestinations.isEmpty() && savedPlaces.isEmpty()) {
                 MessageCard(
                     modifier = modifier,
-                    title = "No recent or saved places yet",
-                    body = "Select a search result or save an Explore place to keep it handy here for the next trip."
+                    title = "Nothing saved yet",
+                    body = "Pick a destination or save an Explore result and it will show up here for the next round."
                 )
             } else {
                 LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -262,39 +278,38 @@ private fun SearchResultsSection(
                                     fullAddress = place.address,
                                     coordinate = place.coordinate
                                 ),
-                                onSelect = { onPlaceSelected(PlaceResult(place.canonicalPlaceId, place.name, place.address, place.coordinate)) }
+                                supportingLabel = place.typeLabel,
+                                icon = { Icon(Icons.Default.History, contentDescription = null) },
+                                onSelect = { onPlaceSelected(place.toPlaceResult()) }
                             )
                         }
                     }
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    if (recentDestinations.isNotEmpty()) {
+                        item {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.History, contentDescription = null)
                                 Text("Recent destinations", style = MaterialTheme.typography.titleMedium)
-                            }
-                            TextButton(onClick = onClearRecentDestinations) {
-                                Icon(Icons.Default.DeleteSweep, contentDescription = null)
-                                Text("Clear all")
-                            }
-                        }
-                    }
-                    items(recentDestinations, key = { it.id }) { place ->
-                        DestinationCard(
-                            place = place,
-                            onSelect = { onPlaceSelected(place) },
-                            action = {
-                                IconButton(onClick = { onRemoveRecentDestination(place.id) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Remove recent destination")
+                                TextButton(onClick = onClearRecentDestinations) {
+                                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                                    Text("Clear")
                                 }
                             }
-                        )
+                        }
+                        items(recentDestinations, key = { it.id }) { place ->
+                            DestinationCard(
+                                place = place,
+                                icon = { Icon(Icons.Default.History, contentDescription = null) },
+                                action = {
+                                    IconButton(onClick = { onRemoveRecentDestination(place.id) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Remove recent destination")
+                                    }
+                                },
+                                onSelect = { onPlaceSelected(place) }
+                            )
+                        }
                     }
                 }
             }
@@ -305,39 +320,41 @@ private fun SearchResultsSection(
 @Composable
 private fun DestinationCard(
     place: PlaceResult,
-    onSelect: () -> Unit,
-    action: @Composable (() -> Unit)? = null
+    supportingLabel: String? = null,
+    icon: @Composable (() -> Unit)? = null,
+    action: @Composable (() -> Unit)? = null,
+    onSelect: () -> Unit
 ) {
     Card(onClick = onSelect, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            icon?.invoke()
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(place.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    place.fullAddress,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(place.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                supportingLabel?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                Text(place.fullAddress, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             action?.invoke()
         }
     }
 }
 
+private fun SavedPlaceRecord.toPlaceResult(): PlaceResult = PlaceResult(
+    id = canonicalPlaceId,
+    name = name,
+    fullAddress = address,
+    coordinate = coordinate
+)
+
 @Composable
-private fun MessageCard(
-    modifier: Modifier = Modifier,
-    title: String,
-    body: String
-) {
+private fun MessageCard(modifier: Modifier = Modifier, title: String, body: String) {
     Card(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(body, style = MaterialTheme.typography.bodyMedium)
+            Text(body)
         }
     }
 }

@@ -7,14 +7,25 @@ Simon Says GPS is a turn-by-turn Android navigation app with a Simon Says rules 
 - Search for destinations with debounced Nominatim queries, short-lived cached results, and recent destination shortcuts.
 - Preview an OSM route on an OpenStreetMap/MapLibre map, with lightweight cached route previews for brief reconnect scenarios.
 - Start navigation with spoken prompts powered by Android TextToSpeech.
-- Follow richer active-navigation banners with clearer Simon Says authorization messaging, arrival handling, and lane-guidance-ready placeholders.
+- Follow richer active-navigation banners with clearer Simon Says authorization messaging, arrival handling, and lane guidance copy that only promises lane hints when a provider actually supports them.
 - Pick from multiple prompt personalities for spoken and on-screen navigation callouts.
 - Automatically start and stop the foreground navigation service with the active turn-by-turn session.
 - Detect upcoming maneuvers and decide whether a turn was authorized, missed, or unauthorized.
 - Reroute with playful prompts like: _"Oh, Simon didn't say. Rerouting."_
-- Offer a debug overlay, demo mode, and a routing-provider selector for emulator testing and provider experiments.
+- Offer a debug overlay, demo mode, and a routing-provider selector for emulator testing and provider experiments in non-release builds, while keeping the release surface intentionally smaller.
 - Add an Explore tab foundation with intent chips, ranked results, explainable suggestion reasons, configurable safety/detour rules, and demo providers that exercise the existing location/map stack.
 - Personalize Explore with first-party visit history, home anchors, Close to Home and On My Way ranking, plus transport/route-style preferences that are surfaced honestly when provider support is partial.
+
+## Release-safe surface for the first Play-facing build
+
+This repo now distinguishes between **developer builds** and the **release-safe surface** used for a polished first launch:
+
+- Release builds hide unfinished or developer-only controls such as the Valhalla placeholder, raw Explore provider diagnostics, debug overlay toggles, demo mode, review-report hooks, soundtrack-provider scaffolding, and heavy-vehicle dimension sliders.
+- Release builds also sanitize previously persisted unsafe settings by falling back to stable defaults like OSRM, disabling debug/demo toggles, and turning off soundtrack scaffolding if those values were enabled in a debug build first.
+- Debug builds keep those surfaces available so contributors can still test provider fallback behavior, inspect Explore/source diagnostics, and exercise unfinished integrations without shipping them to end users.
+- First-run copy now explains the core Simon Says mechanic before navigation starts, and permission rationale text focuses on why location/microphone access matters instead of reading like a generic Android prompt.
+
+This keeps the April Fools concept front and center: playful navigation is real, while unfinished integrations are either honestly labeled as beta/developer-only or postponed out of the release path.
 
 ## Stack choices
 
@@ -92,7 +103,7 @@ Default/provider-specific properties live in `gradle.properties` and can be over
 
 - **OSRM:** Fully implemented and remains the default provider.
 - **GraphHopper:** Adapter implemented for route calculation and maneuver mapping. It is only considered available when `GRAPH_HOPPER_API_KEY` is configured.
-- **Valhalla:** Selection option and configuration placeholder are present, but a concrete adapter is not implemented in this PR. Selecting it falls back gracefully to the configured default provider when available.
+- **Valhalla:** Still a placeholder only. It remains available for developer builds, but the release-safe surface hides it until a real adapter exists.
 
 ### API/base URL configuration
 
@@ -331,17 +342,17 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 
 ## Testing the navigation logic
 
-- Enable **Demo mode** to use a fake location stream in the emulator.
+- Enable **Demo mode** to use a fake location stream in the emulator. This control is intentionally limited to non-release builds.
 - Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
-- Switch **Routing provider** in Settings to validate provider resolution and fallback behavior.
-- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, active-step distance, route corridor status, corridor distance/threshold, heading confidence, hysteresis state, reroute suppression reasons, transition reasons, authorization state, arrival state, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
+- Switch **Routing provider** in Settings to validate provider resolution and fallback behavior. Release builds only show providers that are actually configured for that build.
+- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, active-step distance, route corridor status, corridor distance/threshold, heading confidence, hysteresis state, reroute suppression reasons, transition reasons, authorization state, arrival state, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline. This overlay is intentionally hidden in release builds.
 - Unit tests cover prompt generation, authorization assignment, unauthorized-turn detection, near-intersection jitter suppression, slight heading drift, slow valid-turn approaches, missed-turn logic, reroute cooldown behavior, arrival-state transitions, step-progression stability, navigation banner mapping, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, recent destination persistence/mapping behavior, and navigation-session restoration/storage behavior.
 
 ## Enhanced active navigation UX
 
 - Active guidance now promotes a richer maneuver banner with step progress, turn-type context, road labeling, and a clearer explanation of whether the current instruction is a real **Simon Says** move or informational-only.
 - When the final step resolves, the navigation state explicitly transitions through `APPROACHING_DESTINATION` to `ARRIVED`, allowing the UI to show a dedicated arrival banner instead of falling back to a generic empty-next-step message.
-- Lane-guidance-ready abstractions now exist in the domain and UI layers. The current OSRM/GraphHopper providers do not yet populate lane-level data, so the UI shows a Compose-native placeholder that explains lane guidance will appear when provider support lands.
+- Lane-guidance-ready abstractions now exist in the domain and UI layers. The current OSRM/GraphHopper providers do not yet populate lane-level data, so release builds avoid surfacing placeholder lane cards and instead use softer copy that says lane hints will appear when provider support lands. Developer builds still expose the placeholder for verification.
 - Navigation heuristics now use projected polyline snapping, dynamic route-corridor thresholds, near-intersection grace periods, heading-confidence-aware turn detection, bounded reroute cooldowns, and a short post-step progression lock to reduce false reroutes and adjacent-step oscillation.
 - Arrival handling is intentionally safer near the destination edge: once the final maneuver is effectively satisfied at low speed, arrival latches instead of immediately bouncing back into reroute logic because of one noisy sample.
 - No binary files were added for this UX update.
@@ -367,7 +378,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Public OSRM and Nominatim endpoints are convenient defaults but are not sufficient for real production scale.
 - The checked-in fallback map style remains a development-safe default and should be replaced by environment configuration in real production deployments.
 - GraphHopper support depends on a configured API key and currently uses a lightweight maneuver mapping based on the Directions API instruction sign values.
-- Valhalla is scaffolded for selection/configuration but not yet implemented as a concrete routing adapter.
+- Valhalla is scaffolded for selection/configuration but not yet implemented as a concrete routing adapter, so it is now treated as a developer-only option instead of a release-facing promise.
 - Offline support in this phase is intentionally lightweight: repeated destination queries and the latest matching route preview are cached, but the app does not perform full offline routing.
 - Turn detection heuristics now combine projected route proximity, heading deltas, heading-confidence checks, intersection hysteresis, step-distance trends, and reroute cooldowns; they are still intentionally understandable heuristics rather than full map matching.
 - The app still does not claim lane-level localization, sensor fusion, or production-grade map matching, so dense urban canyons, bad heading data, or incomplete provider maneuvers can still produce edge cases.
@@ -375,6 +386,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Map overlay styling is intentionally lightweight for phase 1.
 - The foreground navigation service now starts automatically when active guidance begins and stops automatically when guidance ends, arrives, or is cancelled.
 - Active navigation sessions are now snapshotted to DataStore and can be restored after app reopen or process recreation, with WorkManager providing deferred recovery checks for long-running trips.
+- No binary files were added by the release-safe gating and onboarding/polish pass.
 
 ## Phase 1 delivered
 

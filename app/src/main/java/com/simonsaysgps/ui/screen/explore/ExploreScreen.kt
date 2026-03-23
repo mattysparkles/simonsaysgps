@@ -102,15 +102,16 @@ fun ExploreScreenContent(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Explore first look", style = MaterialTheme.typography.titleMedium)
-                        Text("This first-run stub explains the foundation: choose an intent, review why picks were ranked, and tune safety and detour rules in settings.")
-                        TextButton(onClick = onDismissWalkthrough) { Text("Got it") }
+                        Text("Choose an intent chip, let Simon rank a few nearby ideas, and then check the 'why this was chosen' explanation before you commit. Explore is meant to feel playful, not random.")
+                        Text("Saved places, local reviews, and your Explore rules stay on-device in this first release.")
+                        TextButton(onClick = onDismissWalkthrough) { Text("Sounds good") }
                     }
                 }
             }
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("How Explore works", style = MaterialTheme.typography.titleMedium)
-                    Text("Each chip maps to a ranking intent, not a promise of perfect data. The app combines distance, hours, reviews, novelty, route fit, and optional provider signals.")
+                    Text("Each chip maps to a ranking intent, not a guarantee of perfect live data. Simon combines distance, hours, local reviews, novelty, route fit, and any provider signals that are actually available in this build.")
                     Text(settingsSummary, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -118,7 +119,7 @@ fun ExploreScreenContent(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Saved places", style = MaterialTheme.typography.titleMedium)
                     if (savedPlaces.isEmpty()) {
-                        Text("Saved favorites from Explore show up here for quick map preview or navigation entry.")
+                        Text("Saved favorites from Explore show up here for quick map preview or navigation entry. Nothing is synced to an account yet.")
                     } else {
                         savedPlaces.take(3).forEach { savedPlace ->
                             Card(modifier = Modifier.fillMaxWidth()) {
