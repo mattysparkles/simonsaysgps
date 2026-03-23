@@ -368,6 +368,25 @@ class AppViewModelTest {
     }
 
     @Test
+    fun `sync permission state seeds startup permissions without extra prompts`() = runTest(dispatcher) {
+        val locationFlow = MutableSharedFlow<LocationSample>(extraBufferCapacity = 4)
+        val viewModel = createViewModel(locationFlow = locationFlow)
+
+        viewModel.syncPermissionState(
+            hasLocationPermission = true,
+            hasMicrophonePermission = true,
+            hasNotificationPermission = false
+        )
+        locationFlow.emit(sample(0.0, 0.0, 0f))
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.hasLocationPermission).isTrue()
+        assertThat(viewModel.uiState.value.voiceAssistant.hasMicrophonePermission).isTrue()
+        assertThat(viewModel.uiState.value.hasNotificationPermission).isFalse()
+        assertThat(viewModel.uiState.value.currentLocation?.coordinate).isEqualTo(Coordinate(0.0, 0.0))
+    }
+
+    @Test
     fun `voice capture errors and transcripts feed the voice assistant ui state`() = runTest(dispatcher) {
         val voiceManager = FakeVoiceAssistantManager()
         val viewModel = createViewModel(voiceAssistantManager = voiceManager)

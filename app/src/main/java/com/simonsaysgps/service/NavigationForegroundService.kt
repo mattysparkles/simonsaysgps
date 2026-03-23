@@ -44,17 +44,18 @@ class NavigationForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Navigation",
+                getString(R.string.navigation_notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
+            channel.description = getString(R.string.navigation_notification_channel_description)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Simon Says GPS")
-            .setContentText("Navigation is active.")
+            .setContentTitle(getString(R.string.navigation_notification_title))
+            .setContentText(getString(R.string.navigation_notification_text))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

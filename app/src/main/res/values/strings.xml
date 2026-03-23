@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Simon Says GPS</string>
+    <string name="navigation_notification_channel_name">Navigation</string>
+    <string name="navigation_notification_channel_description">Shows the ongoing notification while turn-by-turn guidance is active.</string>
+    <string name="navigation_notification_title">Simon Says GPS</string>
+    <string name="navigation_notification_text">Navigation is active so Simon can keep trip guidance visible.</string>
 </resources>

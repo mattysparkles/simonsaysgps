@@ -55,4 +55,17 @@ class MapStyleConfigurationTest {
         assertThat(resolved.usesFallback).isFalse()
         assertThat(resolved.warningMessage).isNull()
     }
+
+    @Test
+    fun `invalid fallback style URL still resolves to built in safe style`() {
+        val resolved = MapStyleConfiguration.resolve(
+            configuredStyleUrl = "",
+            fallbackStyleUrl = "not-a-style-url",
+            allowHttp = false
+        )
+
+        assertThat(resolved.styleUrl).isEqualTo("https://demotiles.maplibre.org/style.json")
+        assertThat(resolved.usesFallback).isTrue()
+        assertThat(resolved.warningMessage).contains("built-in safe fallback")
+    }
 }

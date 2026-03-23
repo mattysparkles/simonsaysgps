@@ -77,6 +77,8 @@ Source roots now map cleanly onto those boundaries:
 7. Choose **Routing provider** in Settings if you want to test a non-default provider.
 
 > Note: `gradle/wrapper/gradle-wrapper.jar` is intentionally excluded from the tracked PR. See `docs/BINARY_FILES_MANIFEST.md` for its checksum and regeneration instructions.
+>
+> For Play Store prep and release hardening checks, see [`docs/release_checklist.md`](docs/release_checklist.md).
 
 ### Routing provider configuration
 

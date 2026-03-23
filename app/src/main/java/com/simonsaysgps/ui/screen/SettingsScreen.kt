@@ -125,23 +125,23 @@ fun SettingsScreenContent(
             MessageCard(
                 title = "Release honesty",
                 body = if (releaseSurface.releaseSafeSurface) {
-                    "This release keeps unfinished routing/provider experiments out of the main surface so the Simon Says core stays clear and reliable."
+                    "This release keeps unfinished routing/provider experiments out of the main surface so the Simon Says core stays clear and reliable. The app requests location only for active trip guidance, microphone only for user-started voice capture, and no background location permission."
                 } else {
                     "Developer build: experimental provider picks, soundtrack scaffolding, and diagnostics stay visible for testing."
                 }
             )
             ToggleCard("Voice prompts", settings.voiceEnabled, "Read turn prompts aloud while navigating.", onVoiceEnabledChange)
-            ToggleCard("Voice assistant", settings.voiceAssistantSettings.enabled, "Enable voice-first input flows for search, reporting, reviews, and typed backup commands.", onVoiceAssistantEnabledChange)
+            ToggleCard("Voice assistant", settings.voiceAssistantSettings.enabled, "Enable user-started voice input for search, reporting, and review drafting. Turning this off leaves typed commands available and prevents microphone capture from this feature.", onVoiceAssistantEnabledChange)
             ToggleCard("Hands-free reporting", settings.voiceAssistantSettings.handsFreeReportingEnabled, "Allow report staging by voice, but still require an explicit confirmation step before submission.", onHandsFreeReportingChange)
             ToggleCard("Voice confirmation", settings.voiceAssistantSettings.voiceConfirmationRequired, "Require a yes/no confirmation before Simon submits a crowd report.", onVoiceConfirmationChange)
             ToggleCard("Spoken confirmations", settings.voiceAssistantSettings.spokenConfirmationsEnabled, "Speak back short acknowledgements after voice actions to reduce glance time.", onSpokenConfirmationsChange)
-            ToggleCard("AI cleanup suggestions (beta)", settings.voiceAssistantSettings.aiCleanupOptIn, "Offer optional cleanup suggestions for dictated reviews. Suggestions stay local to this flow and are never treated as published reviews automatically.", onAiCleanupOptInChange)
+            ToggleCard("Review cleanup suggestions", settings.voiceAssistantSettings.aiCleanupOptIn, "Offer optional cleanup suggestions for dictated reviews. Suggestions stay local to this flow and are never treated as published reviews automatically.", onAiCleanupOptInChange)
             if (releaseSurface.showSoundtrackScaffolding) {
                 ToggleCard("Soundtrack scaffolding", settings.voiceAssistantSettings.soundtrackIntegrationEnabled, "Store playlist intent requests for future providers without assuming a specific music SDK today.", onSoundtrackIntegrationChange)
             } else {
                 MessageCard(
-                    title = "Playlist ideas are coming later",
-                    body = "The release build keeps live soundtrack-provider toggles hidden. Voice requests can stay focused on navigation, reports, and review drafting for now."
+                    title = "Music requests are unavailable in this release",
+                    body = "The release build keeps soundtrack-provider controls hidden so voice stays focused on navigation, reports, and review drafting."
                 )
             }
             if (releaseSurface.showDebugOverlayControls) {
@@ -210,7 +210,7 @@ fun SettingsScreenContent(
             ToggleCard("Avoid tolls", routing.avoidTolls, "Request toll avoidance when the provider can honor it.", onAvoidTollsChanged)
             ToggleCard("Prefer scenic roads", routing.preferScenic, "Ask for a more scenic-feeling route without intentionally creating wasteful loops.", onPreferScenicChanged)
             ToggleCard("Prefer fastest route", routing.preferFastest, "Keep the routing layer biased toward the fastest practical route.", onPreferFastestChanged)
-            ToggleCard("Prefer low-stress roads (beta)", routing.preferLowStress, "Use a calmer-road preference if the provider supports one.", onPreferLowStressChanged)
+            ToggleCard("Prefer calmer roads", routing.preferLowStress, "Use a calmer-road preference if the provider supports one.", onPreferLowStressChanged)
             ToggleCard("Simon Challenge Mode", routing.simonChallengeMode, "Playfully ask for more turn variety while staying bounded and sane.", onSimonChallengeModeChanged)
             SliderCard(
                 title = "Challenge intensity",

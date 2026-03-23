@@ -104,12 +104,12 @@ fun VoiceAssistantScreenContent(
                     Text("Tap the microphone to dictate a single command, or type one manually. Simon only listens after you explicitly start capture from this screen.")
                     if (!state.hasMicrophonePermission) {
                         Button(onClick = onRequestMicrophonePermission, modifier = Modifier.fillMaxWidth()) { Text("Grant microphone for voice capture") }
-                        Text("No hidden always-listening behavior is enabled in this build.")
+                        Text("If you skip microphone access, typed commands and on-screen actions still work. Simon does not listen in the background.")
                     }
                     Text("Voice assistant enabled: $voiceEnabled")
                     Text("Voice confirmation required: $voiceConfirmationRequired")
                     Text("AI cleanup opt-in: $aiCleanupEnabled")
-                    Text(if (showSoundtrackScaffolding) "Soundtrack integrations enabled: $soundtrackEnabled" else "Music-provider handoff is intentionally hidden in this release build.")
+                    Text(if (showSoundtrackScaffolding) "Soundtrack integrations enabled: $soundtrackEnabled" else "Music-provider handoff is unavailable in this release build.")
                 }
             }
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -210,9 +210,9 @@ fun VoiceAssistantScreenContent(
                     Text(if (showSoundtrackScaffolding) "Soundtrack scaffolding" else "What voice can do today")
                     Text(
                         if (showSoundtrackScaffolding) {
-                            "Ask for vibes like 'make me a spooky road trip playlist' or 'make me a beach playlist'. Simon saves the request and explains that live music-provider handoff is still future work."
+                            "Ask for vibes like 'make me a spooky road trip playlist' or 'make me a beach playlist'. Simon saves the request and explains that live music-provider handoff is not shipping in this build."
                         } else {
-                            "This release keeps voice focused on navigation search, passenger reports, and local review drafting. Music-provider handoff is postponed until it feels deliberate instead of half-wired."
+                            "This release keeps voice focused on navigation search, passenger reports, and local review drafting. Music-provider handoff is intentionally disabled here."
                         }
                     )
                     if (showSoundtrackScaffolding) {

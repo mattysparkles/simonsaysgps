@@ -4,6 +4,8 @@ import com.simonsaysgps.BuildConfig
 import com.simonsaysgps.data.remote.GraphHopperApi
 import com.simonsaysgps.data.remote.NominatimApi
 import com.simonsaysgps.data.remote.OsrmApi
+import com.simonsaysgps.config.NetworkEndpointConfiguration
+import com.simonsaysgps.config.ResolvedNetworkEndpointConfiguration
 import com.simonsaysgps.data.repository.DataStoreNavigationSessionRepository
 import com.simonsaysgps.data.repository.DataStoreRecentDestinationRepository
 import com.simonsaysgps.data.repository.DataStoreRouteCacheStore
@@ -84,6 +86,7 @@ import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Named
 import javax.inject.Singleton
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -100,6 +103,8 @@ object AppModule {
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+    private const val TAG = "NetworkModule"
+
     @Provides
     @Singleton
     fun provideMoshi(): Moshi = Moshi.Builder()
@@ -125,6 +130,13 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideResolvedNetworkEndpointConfiguration(): ResolvedNetworkEndpointConfiguration =
+        NetworkEndpointConfiguration.resolve().also { resolved ->
+            resolved.warnings.forEach { warning -> Log.w(TAG, warning) }
+        }
+
+    @Provides
+    @Singleton
     fun provideRoutingProviderConfiguration(): RoutingProviderConfiguration = RoutingProviderConfiguration(
         defaultProvider = RoutingProvider.fromNameOrDefault(BuildConfig.DEFAULT_ROUTING_PROVIDER),
         graphHopperApiKey = BuildConfig.GRAPH_HOPPER_API_KEY,
@@ -135,8 +147,12 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("nominatim")
-    fun provideNominatimRetrofit(client: OkHttpClient, moshi: Moshi): Retrofit = Retrofit.Builder()
-        .baseUrl(BuildConfig.NOMINATIM_BASE_URL)
+    fun provideNominatimRetrofit(
+        client: OkHttpClient,
+        moshi: Moshi,
+        endpointConfiguration: ResolvedNetworkEndpointConfiguration
+    ): Retrofit = Retrofit.Builder()
+        .baseUrl(endpointConfiguration.nominatimBaseUrl)
         .client(client)
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
@@ -144,8 +160,12 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("osrm")
-    fun provideOsrmRetrofit(client: OkHttpClient, moshi: Moshi): Retrofit = Retrofit.Builder()
-        .baseUrl(BuildConfig.OSRM_BASE_URL)
+    fun provideOsrmRetrofit(
+        client: OkHttpClient,
+        moshi: Moshi,
+        endpointConfiguration: ResolvedNetworkEndpointConfiguration
+    ): Retrofit = Retrofit.Builder()
+        .baseUrl(endpointConfiguration.osrmBaseUrl)
         .client(client)
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
@@ -153,8 +173,12 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("graphhopper")
-    fun provideGraphHopperRetrofit(client: OkHttpClient, moshi: Moshi): Retrofit = Retrofit.Builder()
-        .baseUrl(BuildConfig.GRAPH_HOPPER_BASE_URL)
+    fun provideGraphHopperRetrofit(
+        client: OkHttpClient,
+        moshi: Moshi,
+        endpointConfiguration: ResolvedNetworkEndpointConfiguration
+    ): Retrofit = Retrofit.Builder()
+        .baseUrl(endpointConfiguration.graphHopperBaseUrl)
         .client(client)
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()

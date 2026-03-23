@@ -218,14 +218,46 @@ class AppViewModel @Inject constructor(
     }
 
     fun onLocationPermissionResult(granted: Boolean) {
+        val previousLocationPermission = _uiState.value.hasLocationPermission
         _uiState.value = _uiState.value.copy(hasLocationPermission = granted, isLoading = false)
-        if (granted) startLocationUpdates()
+        if (granted && !previousLocationPermission) {
+            startLocationUpdates()
+        } else if (!granted && previousLocationPermission) {
+            locationJob?.cancel()
+            locationJob = null
+        }
+    }
+
+    fun syncPermissionState(
+        hasLocationPermission: Boolean,
+        hasMicrophonePermission: Boolean,
+        hasNotificationPermission: Boolean
+    ) {
+        val previousLocationPermission = _uiState.value.hasLocationPermission
+        _uiState.value = _uiState.value.copy(
+            hasLocationPermission = hasLocationPermission,
+            hasNotificationPermission = hasNotificationPermission,
+            isLoading = false,
+            voiceAssistant = _uiState.value.voiceAssistant.copy(
+                hasMicrophonePermission = hasMicrophonePermission
+            )
+        )
+        if (hasLocationPermission && !previousLocationPermission) {
+            startLocationUpdates()
+        } else if (!hasLocationPermission && previousLocationPermission) {
+            locationJob?.cancel()
+            locationJob = null
+        }
     }
 
     fun onMicrophonePermissionResult(granted: Boolean) {
         _uiState.value = _uiState.value.copy(
             voiceAssistant = _uiState.value.voiceAssistant.copy(hasMicrophonePermission = granted)
         )
+    }
+
+    fun onNotificationPermissionResult(granted: Boolean) {
+        _uiState.value = _uiState.value.copy(hasNotificationPermission = granted)
     }
 
     fun updateSearchQuery(query: String) {
@@ -1056,6 +1088,7 @@ data class VoiceAssistantUiState(
 data class AppUiState(
     val isLoading: Boolean = true,
     val hasLocationPermission: Boolean = false,
+    val hasNotificationPermission: Boolean = false,
     val searchQuery: String = "",
     val searchResults: List<PlaceResult> = emptyList(),
     val recentDestinations: List<PlaceResult> = emptyList(),
