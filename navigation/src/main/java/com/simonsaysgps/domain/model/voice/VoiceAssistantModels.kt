@@ -82,7 +82,8 @@ data class ReviewDraft(
     val cleanedSuggestion: String? = null,
     val finalApprovedText: String? = null,
     val selectedCleanupOption: ReviewCleanupOption = ReviewCleanupOption.KEEP_AS_IS,
-    val status: ReviewDraftStatus = ReviewDraftStatus.IDLE
+    val status: ReviewDraftStatus = ReviewDraftStatus.IDLE,
+    val updatedAtEpochMillis: Long = System.currentTimeMillis()
 )
 
 data class SoundtrackIntent(

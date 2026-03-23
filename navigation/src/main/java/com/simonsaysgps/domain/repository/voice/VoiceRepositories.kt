@@ -14,6 +14,7 @@ interface CrowdReportRepository {
 }
 
 interface ReviewDraftRepository {
+    val drafts: Flow<List<ReviewDraft>>
     val activeDraft: Flow<ReviewDraft?>
     suspend fun startDraft(draft: ReviewDraft)
     suspend fun updateRawTranscript(transcript: String)

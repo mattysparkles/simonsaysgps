@@ -5,6 +5,7 @@ import com.simonsaysgps.data.repository.voice.InMemoryCrowdReportRepository
 import com.simonsaysgps.data.repository.voice.InMemoryReviewDraftRepository
 import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.PlaceResult
+import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.voice.CrowdReportType
 import com.simonsaysgps.domain.model.voice.ReviewCleanupOption
 import com.simonsaysgps.domain.model.voice.SoundtrackIntent
@@ -21,8 +22,10 @@ class VoiceAssistantServicesTest {
     @Test
     fun `transcript parser maps commands to supported intents`() {
         assertThat(parser.parse("Simon, find coffee on my way")).isEqualTo(VoiceIntent.SearchOnRoute("coffee"))
-        assertThat(parser.parse("Simon, take me somewhere fun nearby")).isEqualTo(VoiceIntent.Explore(com.simonsaysgps.domain.model.explore.ExploreCategory.FUN))
-        assertThat(parser.parse("Simon, report police")).isEqualTo(VoiceIntent.CrowdReport(CrowdReportType.SPEED_TRAP, note = "police", confidence = 0.9f))
+        assertThat(parser.parse("Simon, take me somewhere fun nearby")).isEqualTo(VoiceIntent.Explore(ExploreCategory.FUN))
+        assertThat(parser.parse("Simon, what is on my way")).isEqualTo(VoiceIntent.Explore(ExploreCategory.ON_MY_WAY))
+        assertThat(parser.parse("Simon, report police ahead")).isEqualTo(VoiceIntent.CrowdReport(CrowdReportType.SPEED_TRAP, note = "police ahead", confidence = 0.9f))
+        assertThat(parser.parse("Simon, leave a review for this place")).isEqualTo(VoiceIntent.ReviewCurrentPlace)
         assertThat(parser.parse("Simon, make me a beach playlist")).isEqualTo(VoiceIntent.Soundtrack("beach"))
     }
 
@@ -62,7 +65,9 @@ class VoiceAssistantServicesTest {
         assertThat(draft?.rawTranscript).isEqualTo("great coffee and fast service")
         assertThat(draft?.cleanedSuggestion).isEqualTo("Great coffee and fast service.")
         drafts.approveFinalText(draft?.cleanedSuggestion.orEmpty())
-        assertThat(drafts.activeDraft.first()?.finalApprovedText).isEqualTo("Great coffee and fast service.")
+        assertThat(drafts.activeDraft.first()).isNull()
+        assertThat(drafts.drafts.first().first().finalApprovedText).isEqualTo("Great coffee and fast service.")
+        assertThat(drafts.drafts.first().first().status.name).isEqualTo("APPROVED")
     }
 
     @Test
@@ -76,11 +81,21 @@ class VoiceAssistantServicesTest {
     }
 
     @Test
-    fun `speech capture manager exposes transcript state`() {
-        val manager = StubSpeechCaptureManager()
-        manager.startListening()
-        manager.submitTranscript("Simon, report pothole")
+    fun `explore dispatch preserves category for ui routing`() = runTest {
+        val dispatcher = DefaultVoiceActionDispatcher(
+            crowdReportRepository = InMemoryCrowdReportRepository(),
+            reviewDraftRepository = InMemoryReviewDraftRepository(),
+            proseCleanupService = StubProseCleanupService(),
+            musicIntentProvider = DemoMusicIntentProvider()
+        )
 
-        assertThat(manager.captureState.value.toString()).contains("TranscriptAvailable")
+        val result = dispatcher.dispatch(VoiceIntent.Explore(ExploreCategory.QUIET), VoiceContext())
+
+        assertThat(result).isEqualTo(
+            VoiceDispatchResult.Explore(
+                category = ExploreCategory.QUIET,
+                spokenConfirmation = "Opening quiet suggestions nearby."
+            )
+        )
     }
 }

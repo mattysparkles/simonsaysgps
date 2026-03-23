@@ -251,40 +251,42 @@ Still future work:
 
 ## Voice assistant input layer
 
-This PR adds a **voice-first input architecture** that complements the existing TTS/navigation stack instead of replacing it.
+This PR upgrades the voice assistant from a mostly in-memory/demo layer into a local-first v1 that is believable in a hands-on release demo without overreaching into hidden always-listening behavior.
 
-### Implemented now
+### Fully working in this phase
 
 - A dedicated voice input domain stack with `VoiceAssistantManager`, `SpeechCaptureManager`, `VoiceIntentParser`, `VoiceActionDispatcher`, `CrowdReportRepository`, `ReviewDraftRepository`, `ProseCleanupService`, and `MusicIntentProvider` abstractions.
-- A new **Voice Assistant** UI entry point from the map screen with large controls for typed/manual command entry, passenger-friendly reporting, review dictation drafting, and soundtrack intent scaffolding.
-- Transcript handling that keeps the **raw transcript**, **interpreted intent**, and **resulting action** separate.
-- Voice/reporting support for commands in the spirit of:
-  - “Simon, find coffee on my way”
-  - “Simon, take me somewhere fun nearby”
-  - “Simon, report speed trap / police / traffic / accident / pothole / roadwork / disabled vehicle / something awesome”
-  - “Simon, leave a review for this place”
-  - “Simon, make me a spooky road trip playlist”
-- Structured crowd reports with timestamp, location, report type, transcript note, confidence, explicit confirmation state, and moderation status fields.
-- Voice review drafts that preserve raw dictated text, optional cleanup suggestions, and final approved text separately.
-- Settings toggles for microphone/voice assistant enablement, spoken confirmations, hands-free reporting, AI cleanup opt-in, and soundtrack integration scaffolding.
+- A clearer **Voice Assistant** entry point from the map screen with microphone permission messaging, typed/manual fallback, passenger-friendly report buttons, review drafting, and explicit soundtrack scaffolding.
+- User-initiated Android-native speech capture via `SpeechRecognizer` when the device supports it, with typed transcript entry kept as the fallback path.
+- Improved transcript parsing for:
+  - Explore requests such as fun, quiet, food, outdoors, close to home, and more
+  - On My Way requests such as “find coffee on my way” and “what is on my way”
+  - report police / speed trap / traffic / accident / pothole / roadwork commands
+  - leave-review commands for the current place
+- Local DataStore persistence for staged/submitted crowd reports so they no longer disappear on process death.
+- Local DataStore persistence for active/approved review drafts so they survive process death.
+- Explicit report confirmation before submission remains required.
+- Review drafts preserve raw dictated text, optional cleanup suggestions, and final approved text separately.
+- Soundtrack/music requests now feel intentional: the UX explains that the request was saved locally while live provider handoff remains future work.
 
-### Scaffolded only in this phase
+### Still scaffolded intentionally
 
-- real always-listening wake words
-- provider-backed speech recognition
-- external review publishing
-- provider-specific AI prose cleanup
+- always-listening wake words
+- hidden/background microphone capture
+- external review publishing to third-party platforms
+- provider-specific AI prose cleanup services
 - live Spotify/Apple Music/YouTube Music/Pandora SDK integrations
 - automatic emergency escalation
 
 ### Permissions, privacy, and limitations
 
-- `RECORD_AUDIO` is now requested for user-initiated voice capture.
-- Voice capture is **not** always listening in this PR.
-- Crowd reports and review drafts are staged locally in-memory in this implementation.
-- Crowd reports require an explicit confirmation step before submission.
-- Soundtrack requests are routed through a provider-agnostic abstraction and currently return a demo/stub response.
-- See [`docs/voice_assistant.md`](docs/voice_assistant.md) for the detailed implementation/scaffolding breakdown.
+- `RECORD_AUDIO` is requested for user-initiated voice capture only.
+- Voice capture is **not** always listening in this build.
+- Crowd reports and review drafts are stored locally on-device via DataStore in this implementation.
+- Crowd reports still require an explicit confirmation step before submission.
+- Native speech recognition depends on Android speech services being present; typed transcript entry remains available even when speech services are unavailable.
+- Soundtrack requests are intentionally provider-agnostic scaffolding and do not launch a proprietary music SDK in this PR.
+- See [`docs/voice_assistant.md`](docs/voice_assistant.md) for the full v1 breakdown.
 
 **No binary files were added in this PR.**
 

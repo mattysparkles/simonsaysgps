@@ -1,48 +1,62 @@
 # Voice assistant input layer
 
-## What is implemented now
+## What is fully working in v1
 
-This PR adds a voice-first input layer that sits beside the existing navigation/TTS output layer instead of overloading it.
+This repo now ships a local-first, user-initiated voice assistant flow that complements the existing navigation/TTS stack instead of replacing it.
 
 Implemented pieces:
 
 - `VoiceAssistantManager` orchestration for transcript handling and intent dispatch.
-- `SpeechCaptureManager` abstraction with a stub/manual transcript capture implementation for safe UI-driven testing.
-- `VoiceIntentParser` rule-based parsing for route-aware search prompts, Explore prompts, crowd reports, review drafting commands, review cleanup requests, and soundtrack requests.
-- `VoiceActionDispatcher` separation so parsing, intent interpretation, and side effects remain distinct.
-- In-memory `CrowdReportRepository` and `ReviewDraftRepository` implementations for staged report/review flows.
-- Structured crowd report models with timestamp, location, transcript note, confidence, user confirmation state, and moderation status.
+- `SpeechCaptureManager` backed by Android's native `SpeechRecognizer` when available, while still allowing typed transcript entry as a first-class fallback.
+- Rule-based `VoiceIntentParser` coverage for Explore requests, On My Way requests, crowd reports, review drafting commands, review cleanup requests, and soundtrack requests.
+- `VoiceActionDispatcher` separation so capture, parsing, intent interpretation, and side effects stay decoupled.
+- Local DataStore-backed `CrowdReportRepository` persistence for staged and submitted reports so they survive process death.
+- Local DataStore-backed `ReviewDraftRepository` persistence so active/approved review drafts survive process death.
+- Structured crowd report models with timestamp, location, transcript note, confidence, explicit user confirmation state, and moderation status.
 - Review draft models that preserve raw transcript, optional cleanup suggestion, and final approved text separately.
-- `ProseCleanupService` abstraction with a stub cleanup implementation.
-- `MusicIntentProvider` abstraction with a demo soundtrack provider that stores the requested vibe without assuming a real SDK.
-- Compose UI for a voice assistant entry point, manual reporting buttons, review dictation drafting, and permissions/status messaging.
-- Settings hooks for microphone/voice assistant enablement, spoken confirmations, hands-free reporting, AI cleanup opt-in, and soundtrack scaffolding toggles.
+- `ProseCleanupService` abstraction with a local stub cleanup implementation.
+- `MusicIntentProvider` abstraction with a demo soundtrack provider that stores the requested vibe without pretending a live provider SDK is wired up.
+- Compose UI for a clearer voice assistant entry point, microphone permission messaging, typed/manual command fallback, pending/submitted report visibility, and saved review draft visibility.
+- Settings hooks for microphone/voice assistant enablement, spoken confirmations, hands-free reporting toggle state, AI cleanup opt-in, and soundtrack scaffolding toggles.
 
-## What is scaffolded only
+## What remains scaffolded only
 
-The following areas are intentionally scaffolded and not represented as production-complete integrations in this PR:
+The following areas are intentionally scaffolded and are not represented as production-complete integrations in this PR:
 
-- real always-listening wake word detection
-- live cloud/on-device speech-to-text provider integration
+- always-listening wake word detection
+- hidden/background microphone capture
 - external review write-back to third-party platforms
-- AI provider-specific cleanup calls
+- provider-specific AI cleanup calls
 - proprietary music service SDK connections and live playlist creation
 - automatic emergency escalation for accident reports
 
 ## Permissions and privacy
 
-- The app now requests `RECORD_AUDIO` for voice input.
-- Voice input is user-initiated from the UI in this PR; there is no hidden always-listening mode.
-- Crowd reports and review drafts in this PR are stored in app memory for the current process, not uploaded to an external service by default.
-- Review cleanup is opt-in and abstracted so future providers can be added without changing the surrounding UX contract.
-- Spoken confirmations can be turned off in Settings if the user prefers less audio chatter.
+- The app requests `RECORD_AUDIO` for voice capture.
+- Voice capture is explicitly user-initiated from the Voice Assistant screen in this build.
+- There is no hidden always-listening mode.
+- Crowd reports and review drafts are stored locally on-device via DataStore in this PR and are not uploaded to an external backend by default.
+- Review cleanup remains opt-in.
+- Spoken confirmations can be turned off in Settings.
 
-## Safety limitations
+## Safety and product limitations
 
-- Crowd reports are staged first and require explicit confirmation before submission.
-- Manual passenger-friendly buttons are available so riders do not need to dictate every report.
-- The current speech capture implementation is a safe scaffold and should not be interpreted as a production-grade wake-word or hands-free driving guarantee.
-- Accident reporting does not automatically contact emergency services.
+- Crowd reports are staged first and still require explicit confirmation before submission.
+- Passenger-friendly tap targets remain available so riders do not need to dictate every report.
+- Native speech recognition depends on Android speech services being available on the device; typed transcript entry remains the fallback path.
+- Soundtrack/music requests are intentionally scaffolded and currently store intent plus messaging only.
+- Accident reporting does not contact emergency services.
+
+## Example supported commands
+
+- “Simon, find coffee on my way”
+- “Simon, what is on my way”
+- “Simon, take me somewhere quiet”
+- “Simon, report police ahead”
+- “Simon, report traffic”
+- “Simon, report pothole”
+- “Simon, leave a review for this place”
+- “Simon, make me a beach playlist”
 
 ## Binary file confirmation
 

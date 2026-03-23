@@ -184,9 +184,27 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            voiceAssistantManager.captureState.collect { captureState ->
+            reviewDraftRepository.drafts.collect { drafts ->
                 _uiState.value = _uiState.value.copy(
-                    voiceAssistant = _uiState.value.voiceAssistant.copy(captureState = captureState)
+                    voiceAssistant = _uiState.value.voiceAssistant.copy(savedReviewDrafts = drafts)
+                )
+            }
+        }
+        viewModelScope.launch {
+            voiceAssistantManager.captureState.collect { captureState ->
+                val voiceAssistant = _uiState.value.voiceAssistant
+                _uiState.value = _uiState.value.copy(
+                    voiceAssistant = voiceAssistant.copy(
+                        captureState = captureState,
+                        draftTranscript = when (captureState) {
+                            is SpeechCaptureState.TranscriptAvailable -> captureState.transcript
+                            else -> voiceAssistant.draftTranscript
+                        },
+                        lastActionMessage = when (captureState) {
+                            is SpeechCaptureState.Error -> captureState.message
+                            else -> voiceAssistant.lastActionMessage
+                        }
+                    )
                 )
             }
         }
@@ -592,6 +610,22 @@ class AppViewModel @Inject constructor(
     }
 
     fun startVoiceCapture() {
+        if (!_uiState.value.settings.voiceAssistantSettings.enabled) {
+            _uiState.value = _uiState.value.copy(
+                voiceAssistant = _uiState.value.voiceAssistant.copy(
+                    lastActionMessage = "Voice assistant input is disabled in Settings."
+                )
+            )
+            return
+        }
+        if (!_uiState.value.voiceAssistant.hasMicrophonePermission) {
+            _uiState.value = _uiState.value.copy(
+                voiceAssistant = _uiState.value.voiceAssistant.copy(
+                    lastActionMessage = "Grant microphone permission to speak with Simon. Typed commands still work."
+                )
+            )
+            return
+        }
         voiceAssistantManager.startListening()
     }
 
@@ -959,12 +993,7 @@ class AppViewModel @Inject constructor(
                 result.spokenConfirmation
             }
             is VoiceDispatchResult.Explore -> {
-                val category = when {
-                    result.spokenConfirmation.contains("fun", ignoreCase = true) -> ExploreCategory.FUN
-                    result.spokenConfirmation.contains("delicious", ignoreCase = true) -> ExploreCategory.DELICIOUS
-                    else -> ExploreCategory.ON_MY_WAY
-                }
-                loadExplore(category)
+                loadExplore(result.category)
                 result.spokenConfirmation
             }
             is VoiceDispatchResult.ReportStaged -> result.spokenConfirmation
@@ -1009,7 +1038,8 @@ data class VoiceAssistantUiState(
     val lastActionMessage: String? = null,
     val pendingReport: CrowdReport? = null,
     val submittedReports: List<CrowdReport> = emptyList(),
-    val activeReviewDraft: ReviewDraft? = null
+    val activeReviewDraft: ReviewDraft? = null,
+    val savedReviewDrafts: List<ReviewDraft> = emptyList()
 )
 
 data class AppUiState(
