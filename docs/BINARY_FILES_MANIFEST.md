@@ -14,3 +14,4 @@ This repository intentionally excludes tracked binary artifacts from the pull re
 - In this environment, the wrapper JAR was generated locally from Gradle 8.14.3 before being removed from the tracked tree.
 
 - No new binary files were added by the visit history, personalized Explore, home anchor, or transport-profile PR.
+- No new binary files were added by the Place Detail, internal reviews, or See Reviews / Leave Review flow PR.

@@ -3,6 +3,7 @@ package com.simonsaysgps.data.repository.explore
 import android.util.Log
 import com.simonsaysgps.domain.model.explore.ExploreCandidate
 import com.simonsaysgps.domain.model.explore.ExploreConfidenceSignal
+import com.simonsaysgps.domain.model.explore.ExploreCanonicalPlaceIdFactory
 import com.simonsaysgps.domain.model.explore.ExploreProviderStatus
 import com.simonsaysgps.domain.model.explore.ExploreQuery
 import com.simonsaysgps.domain.model.explore.ExploreRepositorySnapshot
@@ -163,7 +164,7 @@ class DefaultExploreRepository @Inject constructor(
             val existing = groups.firstOrNull { group -> group.any { isDuplicate(it, candidate) } }
             if (existing != null) existing += candidate else groups += mutableListOf(candidate)
         }
-        return groups.mapIndexed { index, group ->
+        return groups.map { group ->
             val sorted = group.sortedByDescending { it.sourceConfidence }
             val primary = sorted.first()
             val allFacets = group.flatMap { it.facets }.toSet()
@@ -172,7 +173,7 @@ class DefaultExploreRepository @Inject constructor(
             val allHints = group.flatMap { it.whyChosenHints }.distinct()
             val allConfidenceSignals = group.flatMap { it.confidenceSignals }.distinctBy { it.label + it.detail + it.source.provider }
             primary.copy(
-                id = canonicalId(primary, index),
+                id = ExploreCanonicalPlaceIdFactory.fromCandidate(primary),
                 typeLabel = group.maxByOrNull { it.typeLabel.length }?.typeLabel ?: primary.typeLabel,
                 address = group.maxByOrNull { it.address.length }?.address ?: primary.address,
                 facets = allFacets,
@@ -193,10 +194,6 @@ class DefaultExploreRepository @Inject constructor(
         }
     }
 
-    private fun canonicalId(candidate: ExploreCandidate, index: Int): String {
-        val linked = candidate.providerLinks.sortedBy { it.provider }.joinToString("-") { it.externalId }
-        return if (linked.isNotBlank()) "explore-$linked" else "explore-${candidate.name.lowercase().replace("[^a-z0-9]".toRegex(), "")}-${index}"
-    }
 
     private fun isDuplicate(left: ExploreCandidate, right: ExploreCandidate): Boolean {
         val explicitLink = left.providerLinks.any { leftLink -> right.providerLinks.any { it.provider == leftLink.provider && it.externalId == leftLink.externalId } }

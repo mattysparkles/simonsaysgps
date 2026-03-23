@@ -142,8 +142,9 @@ The app now includes an initial **Explore** experience built for clean architect
 
 - A top-level **Explore** entry with the prompt **“Take me Somewhere…”**.
 - Intent chips for: Delicious, Fun, Open Now, I've Never Been, Quiet, Outdoors, Important, Close to Home, On My Way, Special, New, I Can Shop, I Can Learn, Good for Kids, and Having a Sale.
-- A dedicated Explore results screen showing ranked cards with address, status/timing, distance or off-route distance, grouped review summaries, source attribution, confidence-labeled event/promotion signals, and a short explanation of why each suggestion was chosen.
-- Quick actions for preview on map, start navigation, save, see reviews, and leave review. The review actions are intentionally scaffolded as product-ready stubs in this phase.
+- A dedicated Explore results screen showing ranked cards with address, status/timing, distance or off-route distance, grouped review summaries, source attribution, confidence-labeled event/promotion signals, a subtle internal-review badge when available, and a short explanation of why each suggestion was chosen.
+- A dedicated in-app **Place Detail** destination screen for Explore results with loading, partial-data, empty, and error states plus action buttons for navigation, map preview, save, reviews, and internal review authoring.
+- Separate **See Reviews** and **Leave Review** flows. Internal Simon Says GPS reviews are always shown first and are never blended into provider review counts or summaries.
 - A dedicated Explore settings screen persisted through DataStore.
 
 ### Explore architecture
@@ -151,7 +152,7 @@ The app now includes an initial **Explore** experience built for clean architect
 The Explore foundation is split across the existing module boundaries:
 
 - `:navigation` now owns the Explore domain models, provider contracts, heuristics, ranking engine, orchestrator abstraction, and ranking/unit tests.
-- `:app` owns DataStore persistence for `ExploreSettings`, provider implementations and aggregation wiring, lightweight Explore caching, duplicate merging, and the Compose Explore screens.
+- `:app` owns DataStore persistence for `ExploreSettings`, local internal reviews, provider implementations and aggregation wiring, lightweight Explore caching, duplicate merging, place-detail/review repositories, and the Compose Explore screens.
 
 Core Explore contracts introduced in this PR:
 
@@ -170,12 +171,14 @@ Core Explore contracts introduced in this PR:
 This PR intentionally keeps the architecture provider-ready without pretending every integration is equally mature:
 
 - **Fully implemented now:** a real Nominatim-backed place discovery + place-details enrichment path using public OpenStreetMap/Nominatim data.
-- **Scaffolded cleanly behind capability contracts:** curated review, event, and promotion providers plus internal recent-destination visit history enrichment.
+- **Implemented locally now:** device-scoped internal review persistence with aggregate surfacing on Explore cards, Place Detail, and the dedicated review list flow.
+- **Scaffolded cleanly behind capability contracts:** curated provider review summaries, event and promotion providers, plus internal recent-destination visit history enrichment.
 - **Aggregation now merges duplicates** across provider outputs using provider links, normalized names/addresses, phone numbers, and coordinate proximity.
 - **Source attribution and confidence metadata** flow through the repository, ranking engine, and Explore cards.
 - **Provider availability and partial failures** are surfaced in the UI so fallbacks remain visible and debuggable.
 
 See [`docs/explore_provider_integration.md`](docs/explore_provider_integration.md) for the provider matrix, setup expectations, attribution rules, and limitations.
+See [`docs/place_detail_reviews.md`](docs/place_detail_reviews.md) for the dedicated Place Detail screen, internal review persistence, and internal-vs-external review display rules.
 
 ### Personalized Explore and routing context
 
@@ -227,16 +230,16 @@ Implemented now:
 - explainable ranking pipeline with open-now, event timing, rating confidence, route hooks, visit history, and confidence-labeled sale/newness inputs
 - real Nominatim-backed place discovery and detail enrichment
 - duplicate place merging with provider link preservation and source attribution
-- grouped review-source ordering with internal summaries first
+- grouped review-source ordering with internal reviews first, explicit external-provider summary blocks, and no fake combined global rating count
 - partial provider failure handling plus lightweight Explore snapshot caching
-- Compose Explore shell, enriched results cards, and settings UI
+- Compose Explore shell, enriched results cards, dedicated Place Detail / reviews / leave-review screens, and settings UI
 - first-run walkthrough stub
 - ranking/category/settings/repository tests
 
 Still future work:
 
 - additional live review/event/deal providers beyond the current Nominatim place path
-- production review write-back and richer authenticated internal review storage
+- optional backend sync for internal reviews, richer authenticated identity, moderation/report workflows, reactions, photos, and voice-first review drafting handoff
 - richer home-address search/selection flow
 - deeper route-detour estimation tied to routing-provider ETAs
 - true provider-enforced heavy-vehicle restrictions and richer style-specific route generation

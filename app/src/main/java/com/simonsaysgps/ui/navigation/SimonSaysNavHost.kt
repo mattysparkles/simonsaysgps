@@ -14,6 +14,9 @@ import com.simonsaysgps.ui.screen.SplashScreen
 import com.simonsaysgps.ui.screen.explore.ExploreResultsScreen
 import com.simonsaysgps.ui.screen.explore.ExploreScreen
 import com.simonsaysgps.ui.screen.explore.ExploreSettingsScreen
+import com.simonsaysgps.ui.screen.explore.LeaveReviewScreen
+import com.simonsaysgps.ui.screen.explore.PlaceDetailScreen
+import com.simonsaysgps.ui.screen.explore.PlaceReviewsScreen
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 
 @Composable
@@ -49,8 +52,37 @@ fun SimonSaysNavHost(
             ExploreResultsScreen(
                 viewModel = appViewModel,
                 onBack = { navController.popBackStack() },
+                onOpenPlaceDetail = { navController.navigate(Screen.PlaceDetail.route) },
+                onOpenPlaceReviews = { navController.navigate(Screen.PlaceReviews.route) },
+                onOpenLeaveReview = { navController.navigate(Screen.LeavePlaceReview.route) },
                 onPreviewOnMap = { navController.navigate(Screen.Map.route) },
                 onStartNavigation = { navController.navigate(Screen.RoutePreview.route) }
+            )
+        }
+        composable(Screen.PlaceDetail.route) {
+            PlaceDetailScreen(
+                viewModel = appViewModel,
+                onBack = {
+                    appViewModel.clearPlaceDetail()
+                    navController.popBackStack()
+                },
+                onPreviewOnMap = { navController.navigate(Screen.Map.route) },
+                onStartNavigation = { navController.navigate(Screen.RoutePreview.route) },
+                onSeeReviews = { navController.navigate(Screen.PlaceReviews.route) },
+                onLeaveReview = { navController.navigate(Screen.LeavePlaceReview.route) }
+            )
+        }
+        composable(Screen.PlaceReviews.route) {
+            PlaceReviewsScreen(
+                viewModel = appViewModel,
+                onBack = { navController.popBackStack() },
+                onLeaveReview = { navController.navigate(Screen.LeavePlaceReview.route) }
+            )
+        }
+        composable(Screen.LeavePlaceReview.route) {
+            LeaveReviewScreen(
+                viewModel = appViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(Screen.ExploreSettings.route) {
