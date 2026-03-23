@@ -10,22 +10,29 @@ data class ResolvedMapStyleConfiguration(
 )
 
 object MapStyleConfiguration {
+    private const val SAFE_EMBEDDED_FALLBACK_STYLE_URL = "https://demotiles.maplibre.org/style.json"
+
     fun resolve(
         configuredStyleUrl: String = BuildConfig.MAP_STYLE_URL,
         fallbackStyleUrl: String = BuildConfig.MAP_STYLE_FALLBACK_URL,
         allowHttp: Boolean = BuildConfig.ALLOW_HTTP_MAP_STYLE_URL
     ): ResolvedMapStyleConfiguration {
+        val fallbackWarnings = mutableListOf<String>()
         val sanitizedFallback = fallbackStyleUrl.trim()
-        require(isSupportedStyleUrl(sanitizedFallback, allowHttp = true)) {
-            "MAP_STYLE_FALLBACK_URL must be a valid absolute HTTP(S) URL."
+        val resolvedFallback = if (isSupportedStyleUrl(sanitizedFallback, allowHttp = true)) {
+            sanitizedFallback
+        } else {
+            fallbackWarnings += "MAP_STYLE_FALLBACK_URL is invalid. Using the built-in safe fallback style URL instead."
+            SAFE_EMBEDDED_FALLBACK_STYLE_URL
         }
 
         val sanitizedConfigured = configuredStyleUrl.trim()
         if (sanitizedConfigured.isBlank()) {
             return ResolvedMapStyleConfiguration(
-                styleUrl = sanitizedFallback,
+                styleUrl = resolvedFallback,
                 usesFallback = true,
-                warningMessage = "MAP_STYLE_URL is blank. Falling back to the development style URL."
+                warningMessage = (listOf("MAP_STYLE_URL is blank. Falling back to the safe packaged map style URL.") + fallbackWarnings)
+                    .joinToString(" ")
             )
         }
 
@@ -38,9 +45,10 @@ object MapStyleConfiguration {
             )
         } else {
             ResolvedMapStyleConfiguration(
-                styleUrl = sanitizedFallback,
+                styleUrl = resolvedFallback,
                 usesFallback = true,
-                warningMessage = "Invalid MAP_STYLE_URL: $issue Falling back to the development style URL."
+                warningMessage = (listOf("Invalid MAP_STYLE_URL: $issue Falling back to the safe packaged map style URL.") + fallbackWarnings)
+                    .joinToString(" ")
             )
         }
     }

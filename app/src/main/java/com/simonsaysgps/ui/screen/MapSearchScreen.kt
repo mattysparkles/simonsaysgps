@@ -143,7 +143,7 @@ fun MapSearchScreenContent(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Location permission keeps Simon honest.", style = MaterialTheme.typography.titleMedium)
-                        Text("We use location only to place you on the route, time the next Simon Says instruction, and recover if you miss a turn. Without it, you can still browse destinations but not run live navigation.")
+                        Text("We use location only to place you on the route, time the next Simon Says instruction, and recover if you miss a turn. We do not request background location for idle browsing. Without location, you can still browse destinations but not run live navigation.")
                         Button(onClick = onRequestLocationPermission) { Text("Enable location for navigation") }
                     }
                 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -32,7 +33,8 @@ import java.time.format.DateTimeFormatter
 fun RoutePreviewScreen(
     viewModel: AppViewModel,
     onStartNavigation: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    requestNotificationPermission: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
     RoutePreviewScreenContent(
@@ -41,7 +43,8 @@ fun RoutePreviewScreen(
             viewModel.startNavigation()
             onStartNavigation()
         },
-        onBack = onBack
+        onBack = onBack,
+        onRequestNotificationPermission = requestNotificationPermission
     )
 }
 
@@ -50,6 +53,7 @@ fun RoutePreviewScreenContent(
     state: AppUiState,
     onStartNavigation: () -> Unit,
     onBack: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
     mapContent: @Composable (Modifier) -> Unit = { modifier ->
         MapLibreMapView(
             modifier = modifier,
@@ -79,6 +83,20 @@ fun RoutePreviewScreenContent(
             InfoCard("Maneuvers", "${route.maneuvers.size} turns")
             InfoCard("Transport profile", state.settings.routingPreferences.transportProfile.displayName)
             InfoCard("Route style", RoutingSupportAdvisor.plan(state.settings).requestedStyles.joinToString())
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Foreground trip behavior", style = MaterialTheme.typography.titleMedium)
+                    Text("Turn-by-turn guidance runs as a foreground service only while a trip is active. Simon does not request background location access for idle use.")
+                    if (!state.hasNotificationPermission) {
+                        Text("Allow trip notifications so Android can keep the active navigation banner visible while guidance is running.")
+                        Button(onClick = onRequestNotificationPermission, modifier = Modifier.fillMaxWidth()) {
+                            Text("Allow trip notifications")
+                        }
+                    } else {
+                        Text("Trip notifications are allowed, so the active navigation notification can stay visible while guidance is running.")
+                    }
+                }
+            }
             state.routeInfo?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }

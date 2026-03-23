@@ -145,7 +145,7 @@ fun ExploreSettingsScreenContent(
                 label = "${settings.closeToHomeRadiusMiles} miles",
                 onValueChange = { value -> onSettingsChange { it.copy(closeToHomeRadiusMiles = value.toInt()) } }
             )
-            ToggleCard("Enable first-party visit history", settings.visitHistoryEnabled, "Stores app-observed or app-confirmed visits locally so Explore can power I've Never Been and novelty scoring.") {
+            ToggleCard("Enable first-party visit history", settings.visitHistoryEnabled, "Stores app-observed or app-confirmed visits locally on this device so Explore can power I've Never Been and novelty scoring. Turn this off to stop saving new visits.") {
                 onSettingsChange { current -> current.copy(visitHistoryEnabled = it) }
             }
             ChoiceCard(
@@ -157,7 +157,7 @@ fun ExploreSettingsScreenContent(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Saved visit history", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                    Text("Local-first history only. You can remove any place or clear everything at any time.")
+                    Text("Local-only history on this device. You can remove any place or clear everything at any time.")
                     if (visitHistory.isEmpty()) {
                         Text("No visits saved yet.")
                     } else {

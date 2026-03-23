@@ -23,7 +23,8 @@ import com.simonsaysgps.ui.viewmodel.AppViewModel
 fun SimonSaysNavHost(
     appViewModel: AppViewModel = hiltViewModel(),
     requestLocationPermission: () -> Unit,
-    requestMicrophonePermission: () -> Unit
+    requestMicrophonePermission: () -> Unit,
+    requestNotificationPermission: () -> Unit
 ) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = Screen.Splash.route) {
@@ -95,7 +96,8 @@ fun SimonSaysNavHost(
             RoutePreviewScreen(
                 viewModel = appViewModel,
                 onStartNavigation = { navController.navigate(Screen.Navigation.route) },
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                requestNotificationPermission = requestNotificationPermission
             )
         }
         composable(Screen.Navigation.route) {
