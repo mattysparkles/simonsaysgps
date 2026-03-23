@@ -11,6 +11,7 @@ import kotlin.math.sqrt
 
 object GeoUtils {
     private const val EARTH_RADIUS_METERS = 6_371_000.0
+    private const val METERS_PER_DEGREE_LAT = 111_320.0
 
     fun distanceMeters(a: Coordinate, b: Coordinate): Double {
         val lat1 = Math.toRadians(a.latitude)
@@ -53,16 +54,81 @@ object GeoUtils {
     }
 
     fun closestDistanceToPolylineMeters(point: Coordinate, polyline: List<Coordinate>): Double {
-        if (polyline.size < 2) return Double.MAX_VALUE
-        return polyline.zipWithNext { a, b ->
-            minOf(distanceMeters(point, a), distanceMeters(point, b), midpointDistance(point, a, b))
-        }.minOrNull() ?: Double.MAX_VALUE
+        return projectOntoPolyline(point, polyline).distanceMeters
     }
 
-    private fun midpointDistance(point: Coordinate, a: Coordinate, b: Coordinate): Double {
-        val mid = Coordinate((a.latitude + b.latitude) / 2, (a.longitude + b.longitude) / 2)
-        return distanceMeters(point, mid)
+    fun projectOntoPolyline(point: Coordinate, polyline: List<Coordinate>): PolylineProjection {
+        if (polyline.size < 2) {
+            return PolylineProjection(
+                distanceMeters = Double.MAX_VALUE,
+                snappedCoordinate = polyline.firstOrNull() ?: point,
+                segmentIndex = 0,
+                segmentFraction = 0.0
+            )
+        }
+        val projectedPoint = toProjectedPoint(point, point.latitude)
+        var best = PolylineProjection(
+            distanceMeters = Double.MAX_VALUE,
+            snappedCoordinate = polyline.first(),
+            segmentIndex = 0,
+            segmentFraction = 0.0
+        )
+        polyline.zipWithNext().forEachIndexed { index, (a, b) ->
+            val referenceLatitude = (a.latitude + b.latitude + point.latitude) / 3.0
+            val aPoint = toProjectedPoint(a, referenceLatitude)
+            val bPoint = toProjectedPoint(b, referenceLatitude)
+            val dx = bPoint.x - aPoint.x
+            val dy = bPoint.y - aPoint.y
+            val segmentLengthSquared = dx * dx + dy * dy
+            val rawFraction = if (segmentLengthSquared == 0.0) 0.0 else {
+                ((projectedPoint.x - aPoint.x) * dx + (projectedPoint.y - aPoint.y) * dy) / segmentLengthSquared
+            }
+            val fraction = rawFraction.coerceIn(0.0, 1.0)
+            val snappedX = aPoint.x + dx * fraction
+            val snappedY = aPoint.y + dy * fraction
+            val distance = sqrt((projectedPoint.x - snappedX).pow(2) + (projectedPoint.y - snappedY).pow(2))
+            if (distance < best.distanceMeters) {
+                best = PolylineProjection(
+                    distanceMeters = distance,
+                    snappedCoordinate = fromProjectedPoint(ProjectedPoint(snappedX, snappedY), referenceLatitude),
+                    segmentIndex = index,
+                    segmentFraction = fraction
+                )
+            }
+        }
+        return best
+    }
+
+    fun hasPassedProjection(current: PolylineProjection, target: PolylineProjection, fractionTolerance: Double = 0.05): Boolean {
+        return current.segmentIndex > target.segmentIndex ||
+            (current.segmentIndex == target.segmentIndex && current.segmentFraction >= target.segmentFraction + fractionTolerance)
     }
 
     fun etaNowPlus(durationSeconds: Double): Long = (System.currentTimeMillis() / 1000L) + durationSeconds.roundToInt()
+
+    private fun toProjectedPoint(coordinate: Coordinate, referenceLatitude: Double): ProjectedPoint {
+        val latRadians = Math.toRadians(referenceLatitude)
+        val x = coordinate.longitude * METERS_PER_DEGREE_LAT * cos(latRadians)
+        val y = coordinate.latitude * METERS_PER_DEGREE_LAT
+        return ProjectedPoint(x = x, y = y)
+    }
+
+    private fun fromProjectedPoint(point: ProjectedPoint, referenceLatitude: Double): Coordinate {
+        val latRadians = Math.toRadians(referenceLatitude)
+        val latitude = point.y / METERS_PER_DEGREE_LAT
+        val longitude = point.x / (METERS_PER_DEGREE_LAT * cos(latRadians))
+        return Coordinate(latitude = latitude, longitude = longitude)
+    }
+
+    data class PolylineProjection(
+        val distanceMeters: Double,
+        val snappedCoordinate: Coordinate,
+        val segmentIndex: Int,
+        val segmentFraction: Double
+    )
+
+    private data class ProjectedPoint(
+        val x: Double,
+        val y: Double
+    )
 }

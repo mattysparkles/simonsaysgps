@@ -5,5 +5,7 @@ data class TurnDetection(
     val detectedTurnType: TurnType,
     val headingDelta: Double,
     val distanceToManeuverMeters: Double,
-    val onRouteCorridor: Boolean
+    val onRouteCorridor: Boolean,
+    val headingConfidence: HeadingConfidence,
+    val matchedExpectedTurn: Boolean
 )

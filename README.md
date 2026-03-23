@@ -291,11 +291,11 @@ This PR adds a **voice-first input architecture** that complements the existing 
 
 ### Basic mode
 
-Every maneuver is marked `REQUIRED_SIMON_SAYS`. If the user turns and Simon authorized it, the route continues. If not, the app reroutes.
+Every maneuver is marked `REQUIRED_SIMON_SAYS`. The navigation engine now uses step proximity, projected route-corridor distance, heading-confidence checks, and short intersection grace windows before deciding that a required turn was actually taken or actually missed.
 
 ### Mischief mode
 
-Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. If the route geometry suggests a turn and the driver follows a non-authorized maneuver, the app calls that out as a Simon violation and reroutes.
+Alternating maneuvers are flagged `NORMAL_INFO_ONLY`, creating fake-out turns. Unauthorized-turn detection is still intentionally explainable rather than magic: it looks for a maneuver-shaped heading change near the active step while the driver remains inside the route corridor, then applies bounded cooldowns so the app does not repeatedly punish the same noisy intersection sample.
 
 ## UI instrumentation and screenshot-oriented tests
 
@@ -331,14 +331,16 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - Enable **Demo mode** to use a fake location stream in the emulator.
 - Switch **Prompt personality** in Settings to preview different tones without changing navigation rules.
 - Switch **Routing provider** in Settings to validate provider resolution and fallback behavior.
-- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, authorization state, arrival state, heading, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
-- Unit tests cover prompt generation, authorization assignment, unauthorized turn detection, missed turn logic, arrival-state transitions, navigation banner mapping, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, recent destination persistence/mapping behavior, and navigation-session restoration/storage behavior.
+- Enable **Debug overlay** to inspect GPS coordinates, step index, next maneuver distance, active-step distance, route corridor status, corridor distance/threshold, heading confidence, hysteresis state, reroute suppression reasons, transition reasons, authorization state, arrival state, and last reroute reason. Search and route status messages also call out when cached data is being used because a request timed out or the device is offline.
+- Unit tests cover prompt generation, authorization assignment, unauthorized-turn detection, near-intersection jitter suppression, slight heading drift, slow valid-turn approaches, missed-turn logic, reroute cooldown behavior, arrival-state transitions, step-progression stability, navigation banner mapping, provider selection/fallback behavior, routing repository mapping behavior, search debouncing, recent destination persistence/mapping behavior, and navigation-session restoration/storage behavior.
 
 ## Enhanced active navigation UX
 
 - Active guidance now promotes a richer maneuver banner with step progress, turn-type context, road labeling, and a clearer explanation of whether the current instruction is a real **Simon Says** move or informational-only.
 - When the final step resolves, the navigation state explicitly transitions through `APPROACHING_DESTINATION` to `ARRIVED`, allowing the UI to show a dedicated arrival banner instead of falling back to a generic empty-next-step message.
 - Lane-guidance-ready abstractions now exist in the domain and UI layers. The current OSRM/GraphHopper providers do not yet populate lane-level data, so the UI shows a Compose-native placeholder that explains lane guidance will appear when provider support lands.
+- Navigation heuristics now use projected polyline snapping, dynamic route-corridor thresholds, near-intersection grace periods, heading-confidence-aware turn detection, bounded reroute cooldowns, and a short post-step progression lock to reduce false reroutes and adjacent-step oscillation.
+- Arrival handling is intentionally safer near the destination edge: once the final maneuver is effectively satisfied at low speed, arrival latches instead of immediately bouncing back into reroute logic because of one noisy sample.
 - No binary files were added for this UX update.
 
 ## Navigation lifecycle resilience
@@ -364,7 +366,8 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 - GraphHopper support depends on a configured API key and currently uses a lightweight maneuver mapping based on the Directions API instruction sign values.
 - Valhalla is scaffolded for selection/configuration but not yet implemented as a concrete routing adapter.
 - Offline support in this phase is intentionally lightweight: repeated destination queries and the latest matching route preview are cached, but the app does not perform full offline routing.
-- Turn detection heuristics currently use route proximity, bearing deltas, and step proximity; they are intentionally understandable rather than fully map-matched.
+- Turn detection heuristics now combine projected route proximity, heading deltas, heading-confidence checks, intersection hysteresis, step-distance trends, and reroute cooldowns; they are still intentionally understandable heuristics rather than full map matching.
+- The app still does not claim lane-level localization, sensor fusion, or production-grade map matching, so dense urban canyons, bad heading data, or incomplete provider maneuvers can still produce edge cases.
 - Navigation/domain logic now lives in `:navigation`, while external routing/geocoding adapters live in `:providers`, leaving `:app` focused on Android wiring and UI.
 - Map overlay styling is intentionally lightweight for phase 1.
 - The foreground navigation service now starts automatically when active guidance begins and stops automatically when guidance ends, arrives, or is cancelled.
@@ -385,7 +388,7 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 ## Future improvements
 
 - Keep trimming Android-specific concerns out of `:navigation` as the app grows, while avoiding unnecessary module sprawl.
-- Improve route snapping and off-route heuristics with better polyline projection and hysteresis.
+- Continue refining route snapping and off-route heuristics, especially for dense intersections, stacked roads, and provider geometries with sparse maneuver placement.
 - Expand lane guidance from the current provider-ready UI/domain scaffold into provider-backed lane-level instructions.
 - Expand the partial Valhalla scaffold into a concrete adapter.
 - Finish wiring a richer settings/debug surface for inspecting resolved map-style metadata at runtime if operational support needs it later.
@@ -394,5 +397,5 @@ When screenshot export is enabled, files are written to `/sdcard/Android/data/co
 
 ## TODOs
 
-- Tighten missed-turn detection to avoid jitter-driven reroutes.
+- Keep tuning missed-turn, unauthorized-turn, and arrival heuristics against more real-world traces; the current logic is deliberately bounded and explainable, not a full map-matching stack.
 - Expand lightweight cache coverage and retry/backoff policies as the app grows.

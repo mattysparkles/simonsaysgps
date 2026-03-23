@@ -14,5 +14,9 @@ data class NavigationSessionState(
     val lastRerouteReason: RerouteReason = RerouteReason.NONE,
     val headingDegrees: Double? = null,
     val arrivalStatus: ArrivalStatus = ArrivalStatus.EN_ROUTE,
-    val navigationActive: Boolean = false
+    val navigationActive: Boolean = false,
+    val intersectionGraceUntilMillis: Long = 0L,
+    val rerouteCooldownUntilMillis: Long = 0L,
+    val stepProgressionLockUntilMillis: Long = 0L,
+    val debugInfo: NavigationDebugInfo = NavigationDebugInfo()
 )
