@@ -107,7 +107,7 @@ class DataStoreSettingsRepository @Inject constructor(
         distanceUnit = this[DISTANCE_UNIT]?.let(DistanceUnit::valueOf) ?: DistanceUnit.IMPERIAL,
         routingProvider = RoutingProvider.fromNameOrDefault(this[ROUTING_PROVIDER]),
         debugMode = this[DEBUG_MODE] ?: false,
-        demoMode = this[DEMO_MODE] ?: true,
+        demoMode = this[DEMO_MODE] ?: false,
         onboardingSeen = this[ONBOARDING_SEEN] ?: false,
         routingPreferences = RoutingPreferences(
             transportProfile = this[TRANSPORT_PROFILE]?.let(TransportProfile::valueOf) ?: TransportProfile.CAR,

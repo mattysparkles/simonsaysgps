@@ -11,7 +11,7 @@ data class SettingsModel(
     val distanceUnit: DistanceUnit = DistanceUnit.IMPERIAL,
     val routingProvider: RoutingProvider = RoutingProvider.OSRM,
     val debugMode: Boolean = false,
-    val demoMode: Boolean = true,
+    val demoMode: Boolean = false,
     val onboardingSeen: Boolean = false,
     val routingPreferences: RoutingPreferences = RoutingPreferences(),
     val exploreSettings: ExploreSettings = ExploreSettings(),

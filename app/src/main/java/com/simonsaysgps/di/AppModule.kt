@@ -113,6 +113,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideClock(): () -> Long = System::currentTimeMillis
+
+    @Provides
+    @Singleton
     fun provideClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)

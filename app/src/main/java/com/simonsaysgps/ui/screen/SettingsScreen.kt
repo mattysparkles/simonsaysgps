@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -49,6 +50,7 @@ fun SettingsScreen(viewModel: AppViewModel, onBack: () -> Unit) {
         onGameModeSelected = { selected -> viewModel.updateSettings { current -> current.copy(gameMode = GameMode.valueOf(selected)) } },
         onPromptFrequencySelected = { selected -> viewModel.updateSettings { it.copy(promptFrequency = PromptFrequency.valueOf(selected)) } },
         onPromptPersonalitySelected = { selected -> viewModel.updateSettings { it.copy(promptPersonality = PromptPersonality.valueOf(selected)) } },
+        onPreviewPromptPersonality = { selected -> viewModel.previewPromptPersonality(PromptPersonality.valueOf(selected)) },
         onDistanceUnitSelected = { selected -> viewModel.updateSettings { it.copy(distanceUnit = DistanceUnit.valueOf(selected)) } },
         onTransportProfileSelected = { selected -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(transportProfile = TransportProfile.valueOf(selected))) } },
         onPrimaryRouteStyleSelected = { selected -> viewModel.updateSettings { current -> current.copy(routingPreferences = current.routingPreferences.copy(primaryRouteStyle = RouteStyle.valueOf(selected))) } },
@@ -82,6 +84,7 @@ fun SettingsScreenContent(
     onGameModeSelected: (String) -> Unit,
     onPromptFrequencySelected: (String) -> Unit,
     onPromptPersonalitySelected: (String) -> Unit,
+    onPreviewPromptPersonality: (String) -> Unit,
     onDistanceUnitSelected: (String) -> Unit,
     onTransportProfileSelected: (String) -> Unit,
     onPrimaryRouteStyleSelected: (String) -> Unit,
@@ -150,6 +153,14 @@ fun SettingsScreenContent(
             if (releaseSurface.showDeveloperOptions) {
                 ToggleCard("Demo mode", settings.demoMode, "Use the built-in demo location feed for emulator and screenshot testing.", onDemoModeChange)
             }
+            MessageCard(
+                title = "Location source",
+                body = if (settings.demoMode) {
+                    "Demo mode is on. Routing and map centering use the scripted simulation path instead of your real device location."
+                } else {
+                    "Demo mode is off. Routing uses your device location when permission and a fresh GPS fix are available."
+                }
+            )
             ChoiceCard(
                 title = "Routing provider",
                 helper = if (releaseSurface.releaseSafeSurface) {
@@ -175,12 +186,10 @@ fun SettingsScreenContent(
                 selected = settings.promptFrequency.name,
                 onSelected = onPromptFrequencySelected
             )
-            ChoiceCard(
-                title = "Prompt personality",
-                helper = "Switch the tone Simon uses for spoken and on-screen callouts.",
-                options = PromptPersonality.entries.map { it.name to it.displayName },
-                selected = settings.promptPersonality.name,
-                onSelected = onPromptPersonalitySelected
+            PromptPersonalityCard(
+                selected = settings.promptPersonality,
+                onSelected = { onPromptPersonalitySelected(it.name) },
+                onPreview = { onPreviewPromptPersonality(it.name) }
             )
             ChoiceCard(
                 title = "Units",
@@ -297,6 +306,43 @@ private fun ChoiceCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RadioButton(selected = selected == value, onClick = { onSelected(value) })
                     Text(label, modifier = Modifier.padding(top = 12.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PromptPersonalityCard(
+    selected: PromptPersonality,
+    onSelected: (PromptPersonality) -> Unit,
+    onPreview: (PromptPersonality) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Prompt personality")
+            Text("Pick Simon's tone, then tap preview to hear a sample voice line.")
+            PromptPersonality.entries.forEach { personality ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        RadioButton(
+                            selected = selected == personality,
+                            onClick = { onSelected(personality) }
+                        )
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            Text(personality.displayName)
+                            Text(personality.description, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    FilledTonalButton(
+                        modifier = Modifier.padding(top = 8.dp),
+                        onClick = { onPreview(personality) }
+                    ) {
+                        Text("Preview")
+                    }
                 }
             }
         }

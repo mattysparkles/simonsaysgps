@@ -56,7 +56,7 @@ class NavigationForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.navigation_notification_title))
             .setContentText(getString(R.string.navigation_notification_text))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()

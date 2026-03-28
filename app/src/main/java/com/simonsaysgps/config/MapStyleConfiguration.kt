@@ -10,7 +10,7 @@ data class ResolvedMapStyleConfiguration(
 )
 
 object MapStyleConfiguration {
-    private const val SAFE_EMBEDDED_FALLBACK_STYLE_URL = "https://demotiles.maplibre.org/style.json"
+    private const val SAFE_EMBEDDED_FALLBACK_STYLE_URL = "asset://map_style_default.json"
 
     fun resolve(
         configuredStyleUrl: String = BuildConfig.MAP_STYLE_URL,
@@ -29,10 +29,9 @@ object MapStyleConfiguration {
         val sanitizedConfigured = configuredStyleUrl.trim()
         if (sanitizedConfigured.isBlank()) {
             return ResolvedMapStyleConfiguration(
-                styleUrl = resolvedFallback,
-                usesFallback = true,
-                warningMessage = (listOf("MAP_STYLE_URL is blank. Falling back to the safe packaged map style URL.") + fallbackWarnings)
-                    .joinToString(" ")
+                styleUrl = SAFE_EMBEDDED_FALLBACK_STYLE_URL,
+                usesFallback = false,
+                warningMessage = null
             )
         }
 
@@ -55,12 +54,21 @@ object MapStyleConfiguration {
 
     private fun validationIssue(styleUrl: String, allowHttp: Boolean): String? {
         val uri = runCatching { URI(styleUrl) }.getOrNull()
-            ?: return "expected an absolute URL with an HTTP or HTTPS scheme"
+            ?: return "expected an absolute URL with an HTTP, HTTPS, or asset scheme"
         val scheme = uri.scheme?.lowercase()
+
+        if (scheme == "asset") {
+            return if (styleUrl.removePrefix("asset://").isBlank()) {
+                "asset style URLs must include a path"
+            } else {
+                null
+            }
+        }
+
         val host = uri.host?.lowercase()
 
         if (scheme.isNullOrBlank() || host.isNullOrBlank()) {
-            return "expected an absolute URL with an HTTP or HTTPS scheme"
+            return "expected an absolute URL with an HTTP, HTTPS, or asset scheme"
         }
 
         if (scheme != "https" && scheme != "http") {

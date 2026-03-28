@@ -110,3 +110,23 @@ internal data class StoredSearchCacheEntry(
     val timestampMillis: Long,
     val results: List<StoredRecentDestination>
 )
+
+internal object RouteCacheStorage {
+    fun adapter(moshi: Moshi): JsonAdapter<List<StoredRouteCacheEntry>> = moshi.adapter(
+        Types.newParameterizedType(List::class.java, StoredRouteCacheEntry::class.java)
+    )
+
+    fun decode(rawValue: String?, adapter: JsonAdapter<List<StoredRouteCacheEntry>>): List<StoredRouteCacheEntry> {
+        if (rawValue.isNullOrBlank()) return emptyList()
+        return runCatching { adapter.fromJson(rawValue).orEmpty() }.getOrDefault(emptyList())
+    }
+
+    fun encode(entries: List<StoredRouteCacheEntry>, adapter: JsonAdapter<List<StoredRouteCacheEntry>>): String = adapter.toJson(entries)
+}
+
+internal data class StoredRouteCacheEntry(
+    val originKey: String,
+    val destinationKey: String,
+    val timestampMillis: Long,
+    val route: StoredRoute
+)

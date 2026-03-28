@@ -1,5 +1,6 @@
 package com.simonsaysgps.ui.viewmodel
 
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,7 @@ import com.simonsaysgps.domain.model.NavigationSessionState
 import com.simonsaysgps.domain.model.NetworkFailure
 import com.simonsaysgps.domain.model.NetworkFailureType
 import com.simonsaysgps.domain.model.PlaceResult
+import com.simonsaysgps.domain.model.PromptPersonality
 import com.simonsaysgps.domain.model.RepositoryResult
 import com.simonsaysgps.domain.model.Route
 import com.simonsaysgps.domain.model.SettingsModel
@@ -54,6 +56,7 @@ import com.simonsaysgps.domain.service.explore.ExploreOrchestrator
 import com.simonsaysgps.domain.service.voice.VoiceAssistantManager
 import com.simonsaysgps.domain.service.voice.VoiceDispatchResult
 import com.simonsaysgps.domain.usecase.ObserveNavigationSessionUseCase
+import com.simonsaysgps.domain.util.GeoUtils
 import com.simonsaysgps.ui.model.explore.PlaceDetailUiState
 import com.simonsaysgps.ui.model.explore.PlaceDetailUiStateFactory
 import com.simonsaysgps.ui.model.explore.ReviewComposeUiState
@@ -69,6 +72,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
@@ -110,6 +114,7 @@ class AppViewModel @Inject constructor(
     private var rerouteJob: Job? = null
     private var lastRecordedVisitPlaceId: String? = null
     private var activePlaceDetailSeed: ExploreResult? = null
+    private val previewShuffleBags = mutableMapOf<PromptPersonality, MutableList<Int>>()
 
     init {
         viewModelScope.launch {
@@ -128,11 +133,16 @@ class AppViewModel @Inject constructor(
 
         viewModelScope.launch {
             settings.collect { updated ->
+                if (updated.demoMode && !isProbablyEmulator()) {
+                    settingsRepository.update { current -> current.copy(demoMode = false) }
+                    return@collect
+                }
                 val sanitized = releaseSurface.sanitize(updated)
                 if (sanitized != updated) {
                     settingsRepository.update { sanitized }
                     return@collect
                 }
+                val previousSettings = _uiState.value.settings
                 _uiState.value = _uiState.value.copy(
                     settings = sanitized,
                     isLoading = false,
@@ -140,7 +150,10 @@ class AppViewModel @Inject constructor(
                         walkthroughVisible = !sanitized.exploreSettings.walkthroughSeen
                     )
                 )
-                if (_uiState.value.hasLocationPermission) startLocationUpdates()
+                if (_uiState.value.hasLocationPermission) {
+                    val shouldRestartLocationFeed = previousSettings.demoMode != sanitized.demoMode
+                    startLocationUpdates(forceRestart = shouldRestartLocationFeed)
+                }
             }
         }
         viewModelScope.launch {
@@ -274,10 +287,12 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        val suggestions = mergeSearchSuggestions(query = query, networkResults = emptyList())
         _uiState.value = _uiState.value.copy(
             searchQuery = query,
+            searchResults = suggestions,
             searchError = null,
-            searchInfo = null,
+            searchInfo = if (suggestions.isNotEmpty()) "Showing recent matches while searching nearby." else null,
             searchInFlight = false,
             searchStatus = SearchStatus.DEBOUNCING
         )
@@ -740,14 +755,19 @@ class AppViewModel @Inject constructor(
     private suspend fun performSearch(query: String) {
         if (query.isBlank() || query != _uiState.value.searchQuery) return
         _uiState.value = _uiState.value.copy(searchInFlight = true, searchError = null, searchInfo = null, searchStatus = SearchStatus.LOADING)
-        when (val result = geocodingRepository.search(query)) {
+        when (val result = geocodingRepository.search(query, _uiState.value.currentLocation?.coordinate)) {
             is RepositoryResult.Success -> {
                 if (query != _uiState.value.searchQuery) return
+                val mergedResults = mergeSearchSuggestions(query = query, networkResults = result.value)
                 _uiState.value = _uiState.value.copy(
-                    searchResults = result.value,
+                    searchResults = mergedResults,
                     searchInFlight = false,
-                    searchStatus = if (result.value.isEmpty()) SearchStatus.EMPTY else SearchStatus.SUCCESS,
-                    searchInfo = searchMessageFor(result.source, result.fallbackFailure),
+                    searchStatus = if (mergedResults.isEmpty()) SearchStatus.EMPTY else SearchStatus.SUCCESS,
+                    searchInfo = buildSearchInfo(
+                        source = result.source,
+                        fallbackFailure = result.fallbackFailure,
+                        hasRecentMatches = localSearchMatches(query).isNotEmpty()
+                    ),
                     searchError = null
                 )
             }
@@ -765,7 +785,103 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun startLocationUpdates() {
+    private fun mergeSearchSuggestions(query: String, networkResults: List<PlaceResult>): List<PlaceResult> {
+        val localMatches = localSearchMatches(query)
+        val currentLocation = _uiState.value.currentLocation?.coordinate
+        return (localMatches + networkResults)
+            .distinctBy { candidate -> candidate.id to candidate.fullAddress.lowercase() }
+            .sortedByDescending { candidate ->
+                suggestionScore(
+                    query = query,
+                    candidate = candidate,
+                    recentDestinations = _uiState.value.recentDestinations,
+                    currentLocation = currentLocation
+                )
+            }
+            .take(MAX_SEARCH_SUGGESTIONS)
+    }
+
+    private fun localSearchMatches(query: String): List<PlaceResult> {
+        val normalizedQuery = query.trim().lowercase()
+        if (normalizedQuery.isBlank()) return emptyList()
+        return (_uiState.value.recentDestinations + _uiState.value.savedPlaces.map { it.toPlaceResult() })
+            .distinctBy { place -> place.id to place.fullAddress.lowercase() }
+            .filter { place ->
+                val searchable = "${place.name} ${place.fullAddress}".lowercase()
+                searchable.contains(normalizedQuery) || normalizedQuery.split(' ').all { token ->
+                    token.isBlank() || searchable.contains(token)
+                }
+            }
+            .take(MAX_SEARCH_SUGGESTIONS)
+    }
+
+    private fun suggestionScore(
+        query: String,
+        candidate: PlaceResult,
+        recentDestinations: List<PlaceResult>,
+        currentLocation: Coordinate?
+    ): Double {
+        val normalizedQuery = query.trim().lowercase()
+        val name = candidate.name.lowercase()
+        val address = candidate.fullAddress.lowercase()
+        val recentIndex = recentDestinations.indexOfFirst { it.id == candidate.id }
+        val distanceMeters = currentLocation?.let { GeoUtils.distanceMeters(it, candidate.coordinate) }
+
+        var score = 0.0
+        if (name.startsWith(normalizedQuery)) score += 120.0
+        if (address.startsWith(normalizedQuery)) score += 70.0
+        if (name.contains(normalizedQuery)) score += 50.0
+        if (address.contains(normalizedQuery)) score += 30.0
+        normalizedQuery.split(' ')
+            .filter { it.isNotBlank() }
+            .forEach { token ->
+                if (name.contains(token)) score += 18.0
+                if (address.contains(token)) score += 9.0
+            }
+        if (recentIndex >= 0) score += 90.0 - (recentIndex * 12.0)
+        if (distanceMeters != null) {
+            score += when {
+                distanceMeters <= 1_000.0 -> 45.0
+                distanceMeters <= 5_000.0 -> 32.0
+                distanceMeters <= 15_000.0 -> 18.0
+                distanceMeters <= 40_000.0 -> 8.0
+                else -> 0.0
+            }
+        }
+        return score
+    }
+
+    private fun buildSearchInfo(
+        source: FetchSource,
+        fallbackFailure: NetworkFailure?,
+        hasRecentMatches: Boolean
+    ): String? {
+        val parts = mutableListOf<String>()
+        if (hasRecentMatches) {
+            parts += "Recent matches are mixed in with nearby results."
+        }
+        searchMessageFor(source, fallbackFailure)?.let(parts::add)
+        if (parts.isEmpty()) {
+            parts += "Suggestions are ranked by what you typed, your current area, and recent places."
+        }
+        return parts.joinToString(" ")
+    }
+
+    fun previewPromptPersonality(personality: PromptPersonality) {
+        val options = previewSamplesFor(personality)
+        val nextIndex = nextPreviewSampleIndex(personality, options.size)
+        voicePromptManager.speak(
+            prompt = options[nextIndex],
+            personality = personality,
+            isPreview = true
+        )
+    }
+
+    private fun startLocationUpdates(forceRestart: Boolean = false) {
+        if (forceRestart) {
+            locationJob?.cancel()
+            locationJob = null
+        }
         if (locationJob?.isActive == true) return
         locationJob = viewModelScope.launch {
             val repo = if (settings.value.demoMode) demoLocationRepository else fusedLocationRepository
@@ -784,13 +900,14 @@ class AppViewModel @Inject constructor(
                     currentState.copy(currentLocation = location)
                 }
                 syncForegroundService(currentState, updatedNavigation)
-                if (updatedNavigation.spokenPrompt != null && settings.value.voiceEnabled) {
-                    voicePromptManager.speak(updatedNavigation.spokenPrompt)
+                val spokenPrompt = updatedNavigation.spokenPrompt
+                if (spokenPrompt != null && settings.value.voiceEnabled) {
+                    voicePromptManager.speak(spokenPrompt, settings.value.promptPersonality)
                 }
                 _uiState.value = _uiState.value.copy(
                     currentLocation = location,
                     navigationState = updatedNavigation,
-                    lastPrompt = updatedNavigation.spokenPrompt ?: _uiState.value.lastPrompt
+                    lastPrompt = spokenPrompt ?: _uiState.value.lastPrompt
                 )
                 if (currentState.arrivalStatus != com.simonsaysgps.domain.model.ArrivalStatus.ARRIVED && updatedNavigation.arrivalStatus == com.simonsaysgps.domain.model.ArrivalStatus.ARRIVED) {
                     _uiState.value.selectedPlace?.let { place ->
@@ -1047,17 +1164,66 @@ class AppViewModel @Inject constructor(
             is VoiceDispatchResult.NoOp -> result.spokenConfirmation
         }
         if (_uiState.value.settings.voiceAssistantSettings.spokenConfirmationsEnabled) {
-            voicePromptManager.speak(message)
+            voicePromptManager.speak(message, _uiState.value.settings.promptPersonality)
         }
         _uiState.value = _uiState.value.copy(
             voiceAssistant = _uiState.value.voiceAssistant.copy(lastActionMessage = message)
         )
     }
 
+    private fun previewSamplesFor(personality: PromptPersonality): List<String> {
+        return when (personality) {
+            PromptPersonality.CLASSIC_SIMON -> listOf(
+                "Simon says take the next right and keep the game moving.",
+                "Simon says stay sharp, then make a smooth left at the light.",
+                "Simon says straight ahead for two blocks. Clean run. No drama.",
+                "Simon says easy now, merge right and keep the streak alive."
+            )
+            PromptPersonality.SNARKY_SIMON -> listOf(
+                "Simon says take the next right. Let us try doing one thing correctly today.",
+                "Simon says left at the light. I believe in you in a very limited way.",
+                "Simon says keep straight. Do not let this become a weird little detour hobby.",
+                "Simon says merge right. Smoothly, please. We are not auditioning for chaos."
+            )
+            PromptPersonality.POLITE_SIMON -> listOf(
+                "Simon says please take the next right when it is safe to do so.",
+                "Simon says a gentle left is coming up soon. Thank you for staying with the route.",
+                "Simon says continue straight for a moment. You are doing nicely.",
+                "Simon says please merge right ahead. Calm and steady works perfectly here."
+            )
+        }
+    }
+
+    private fun nextPreviewSampleIndex(personality: PromptPersonality, optionCount: Int): Int {
+        val bag = previewShuffleBags.getOrPut(personality) { mutableListOf() }
+        if (bag.isEmpty()) {
+            bag += (0 until optionCount).shuffled()
+        }
+        return bag.removeAt(0)
+    }
+
     companion object {
         private const val TAG = "AppViewModel"
         internal const val SEARCH_DEBOUNCE_MS = 400L
+        private const val MAX_SEARCH_SUGGESTIONS = 8
     }
+}
+
+private fun isProbablyEmulator(): Boolean {
+    val fingerprint = Build.FINGERPRINT.lowercase()
+    val model = Build.MODEL.lowercase()
+    val manufacturer = Build.MANUFACTURER.lowercase()
+    val brand = Build.BRAND.lowercase()
+    val device = Build.DEVICE.lowercase()
+    val product = Build.PRODUCT.lowercase()
+
+    return fingerprint.contains("generic") ||
+        fingerprint.contains("emulator") ||
+        model.contains("sdk") ||
+        model.contains("emulator") ||
+        manufacturer.contains("genymotion") ||
+        (brand.startsWith("generic") && device.startsWith("generic")) ||
+        product.contains("sdk")
 }
 
 data class ExploreUiState(

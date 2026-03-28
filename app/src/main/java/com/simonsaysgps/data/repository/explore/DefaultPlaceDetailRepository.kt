@@ -61,8 +61,9 @@ class DefaultPlaceDetailRepository @Inject constructor(
     )
 
     private fun hoursSummaryFor(seed: ExploreResult): String? {
+        val primaryEvent = seed.candidate.primaryEvent
         return when {
-            seed.candidate.primaryEvent != null -> seed.candidate.primaryEvent.summary ?: seed.candidate.primaryEvent.title
+            primaryEvent != null -> primaryEvent.summary ?: primaryEvent.title
             seed.candidate.openNow == true -> "Open now"
             seed.candidate.openNow == false -> "Closed right now"
             seed.candidate.confidenceSignals.any { it.label == "hours-known" } -> "Provider has hours metadata, but the current status is unknown."

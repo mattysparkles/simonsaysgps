@@ -1,0 +1,35 @@
+{
+  "version": 8,
+  "name": "Simon Says Default",
+  "center": [
+    -98.5795,
+    39.8283
+  ],
+  "zoom": 3,
+  "sources": {
+    "osm-raster": {
+      "type": "raster",
+      "tiles": [
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      "tileSize": 256,
+      "attribution": "© OpenStreetMap contributors"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#d7e6cf"
+      }
+    },
+    {
+      "id": "osm-raster-layer",
+      "type": "raster",
+      "source": "osm-raster",
+      "minzoom": 0,
+      "maxzoom": 19
+    }
+  ]
+}

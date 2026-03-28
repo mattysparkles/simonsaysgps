@@ -70,6 +70,7 @@ fun ExploreSettingsScreenContent(
             )
         }
     ) { padding ->
+        val homeCoordinate = settings.homeCoordinate
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -129,7 +130,13 @@ fun ExploreSettingsScreenContent(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Home anchor", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                    Text(if (settings.homeCoordinate != null) "${settings.homeLabel.ifBlank { "Saved Home" }} · ${settings.homeCoordinate.latitude}, ${settings.homeCoordinate.longitude}" else "No home anchor saved yet.")
+                    Text(
+                        if (homeCoordinate != null) {
+                            "${settings.homeLabel.ifBlank { "Saved Home" }} · ${homeCoordinate.latitude}, ${homeCoordinate.longitude}"
+                        } else {
+                            "No home anchor saved yet."
+                        }
+                    )
                     Text("Used by Close to Home so Explore can score nearby places against your saved home area.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = onUseCurrentLocationAsHome) { Text("Use current location") }

@@ -13,6 +13,7 @@ import com.simonsaysgps.domain.model.Coordinate
 import com.simonsaysgps.domain.model.LocationSample
 import com.simonsaysgps.domain.repository.LocationRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -31,6 +32,11 @@ class FusedLocationRepository @Inject constructor(
             .setMinUpdateDistanceMeters(5f)
             .setWaitForAccurateLocation(false)
             .build()
+        launch {
+            runCatching { client.lastLocation }.getOrNull()?.addOnSuccessListener { location ->
+                location?.let { trySend(it.toSample()) }
+            }
+        }
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 result.locations.forEach { trySend(it.toSample()) }

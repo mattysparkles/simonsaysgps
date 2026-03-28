@@ -14,17 +14,21 @@ class NominatimGeocodingRepository @Inject constructor(
     private val searchCacheStore: SearchCacheStore,
     private val clock: () -> Long = { System.currentTimeMillis() }
 ) : GeocodingRepository {
-    override suspend fun search(query: String): RepositoryResult<List<PlaceResult>> {
+    override suspend fun search(query: String, proximity: Coordinate?): RepositoryResult<List<PlaceResult>> {
         if (query.isBlank()) return RepositoryResult.Success(emptyList(), FetchSource.NETWORK)
 
         val normalizedQuery = query.trim().lowercase()
-        val cached = searchCacheStore.read(normalizedQuery)
+        val cacheKey = cacheKey(normalizedQuery, proximity)
+        val cached = searchCacheStore.read(cacheKey)
         if (cached != null && clock() - cached.timestampMillis <= SEARCH_CACHE_TTL_MS) {
             return RepositoryResult.Success(cached.value, FetchSource.CACHE)
         }
 
         return runCatching {
-            api.search(query).map {
+            api.search(
+                query = query,
+                viewbox = proximity?.let(::proximityViewbox)
+            ).map {
                 PlaceResult(
                     id = it.place_id.toString(),
                     name = it.name ?: it.display_name.substringBefore(','),
@@ -34,11 +38,11 @@ class NominatimGeocodingRepository @Inject constructor(
             }
         }.fold(
             onSuccess = { results ->
-                searchCacheStore.write(normalizedQuery, results, clock())
+                searchCacheStore.write(cacheKey, results, clock())
                 RepositoryResult.Success(results, FetchSource.NETWORK)
             },
             onFailure = { error ->
-                val cachedFallback = cached ?: searchCacheStore.read(normalizedQuery)
+                val cachedFallback = cached ?: searchCacheStore.read(cacheKey)
                 if (cachedFallback != null) {
                     RepositoryResult.Success(
                         value = cachedFallback.value,
@@ -54,5 +58,22 @@ class NominatimGeocodingRepository @Inject constructor(
 
     private companion object {
         const val SEARCH_CACHE_TTL_MS = 15 * 60 * 1000L
+
+        fun cacheKey(query: String, proximity: Coordinate?): String {
+            if (proximity == null) return query
+            val latBucket = "%.2f".format(proximity.latitude)
+            val lonBucket = "%.2f".format(proximity.longitude)
+            return "$query@$latBucket,$lonBucket"
+        }
+
+        fun proximityViewbox(proximity: Coordinate): String {
+            val latitudeDelta = 0.12
+            val longitudeDelta = latitudeDelta / kotlin.math.cos(Math.toRadians(proximity.latitude)).coerceAtLeast(0.2)
+            val left = proximity.longitude - longitudeDelta
+            val right = proximity.longitude + longitudeDelta
+            val top = proximity.latitude + latitudeDelta
+            val bottom = proximity.latitude - latitudeDelta
+            return "$left,$top,$right,$bottom"
+        }
     }
 }

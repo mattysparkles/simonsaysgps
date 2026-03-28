@@ -114,6 +114,46 @@ internal data class StoredNavigationSessionState(
     }
 }
 
+internal data class StoredCoordinate(
+    val latitude: Double,
+    val longitude: Double
+) {
+    fun toCoordinate() = Coordinate(latitude = latitude, longitude = longitude)
+
+    companion object {
+        fun fromCoordinate(coordinate: Coordinate) = StoredCoordinate(
+            latitude = coordinate.latitude,
+            longitude = coordinate.longitude
+        )
+    }
+}
+
+internal data class StoredRoute(
+    val geometry: List<StoredCoordinate>,
+    val maneuvers: List<StoredRouteManeuver>,
+    val totalDistanceMeters: Double,
+    val totalDurationSeconds: Double,
+    val etaEpochSeconds: Long
+) {
+    fun toRoute() = Route(
+        geometry = geometry.map(StoredCoordinate::toCoordinate),
+        maneuvers = maneuvers.map(StoredRouteManeuver::toRouteManeuver),
+        totalDistanceMeters = totalDistanceMeters,
+        totalDurationSeconds = totalDurationSeconds,
+        etaEpochSeconds = etaEpochSeconds
+    )
+
+    companion object {
+        fun fromRoute(route: Route) = StoredRoute(
+            geometry = route.geometry.map(StoredCoordinate::fromCoordinate),
+            maneuvers = route.maneuvers.map(StoredRouteManeuver::fromRouteManeuver),
+            totalDistanceMeters = route.totalDistanceMeters,
+            totalDurationSeconds = route.totalDurationSeconds,
+            etaEpochSeconds = route.etaEpochSeconds
+        )
+    }
+}
+
 internal data class StoredLocationSample(
     val coordinate: StoredCoordinate,
     val accuracyMeters: Float,
@@ -136,6 +176,34 @@ internal data class StoredLocationSample(
             bearing = sample.bearing,
             speedMetersPerSecond = sample.speedMetersPerSecond,
             timestampMillis = sample.timestampMillis
+        )
+    }
+}
+
+internal data class StoredRouteManeuver(
+    val id: String,
+    val coordinate: StoredCoordinate,
+    val instruction: String,
+    val turnType: String,
+    val roadName: String?,
+    val distanceFromPreviousMeters: Double,
+    val distanceToNextMeters: Double,
+    val authorization: String,
+    val headingBefore: Double?,
+    val headingAfter: Double?
+) {
+    companion object {
+        fun fromRouteManeuver(maneuver: RouteManeuver) = StoredRouteManeuver(
+            id = maneuver.id,
+            coordinate = StoredCoordinate.fromCoordinate(maneuver.coordinate),
+            instruction = maneuver.instruction,
+            turnType = maneuver.turnType.name,
+            roadName = maneuver.roadName,
+            distanceFromPreviousMeters = maneuver.distanceFromPreviousMeters,
+            distanceToNextMeters = maneuver.distanceToNextMeters,
+            authorization = maneuver.authorization.name,
+            headingBefore = maneuver.headingBefore,
+            headingAfter = maneuver.headingAfter
         )
     }
 }

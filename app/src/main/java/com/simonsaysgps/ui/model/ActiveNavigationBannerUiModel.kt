@@ -85,7 +85,7 @@ object ActiveNavigationBannerUiMapper {
                 nextInstruction != null -> "Then $nextInstruction"
                 else -> navigation.spokenPrompt
             },
-            authorization = maneuver.toAuthorizationUiModel(),
+            authorization = maneuver?.authorization.toAuthorizationUiModel(),
             laneGuidance = maneuver?.laneGuidance.toLaneGuidanceUiModel(maneuver?.turnType)
         )
     }

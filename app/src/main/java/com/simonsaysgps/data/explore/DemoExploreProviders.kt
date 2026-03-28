@@ -81,6 +81,7 @@ class NominatimPlaceDiscoveryProvider @Inject constructor(
         ExploreCategory.CLOSE_TO_HOME -> listOf("park", "library", "supermarket")
         ExploreCategory.GOOD_FOR_KIDS -> listOf("playground", "museum", "park")
         ExploreCategory.QUIET -> listOf("library", "garden", "park")
+        ExploreCategory.OUTDOORS -> listOf("park", "trail", "garden")
         ExploreCategory.IMPORTANT -> listOf("hospital", "pharmacy", "town hall")
         ExploreCategory.FUN -> listOf("museum", "cinema", "arcade")
         ExploreCategory.NEW -> listOf("cafe", "restaurant", "market")

@@ -13,14 +13,14 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,8 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.simonsaysgps.domain.model.explore.ExploreCategory
 import com.simonsaysgps.domain.model.explore.SavedPlaceRecord
+import com.simonsaysgps.ui.components.BrandTopBar
 import com.simonsaysgps.ui.components.TopLevelDestination
 import com.simonsaysgps.ui.components.TopLevelNavigationBar
+import com.simonsaysgps.ui.theme.NightSky
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 
 @Composable
@@ -44,7 +46,10 @@ fun ExploreScreen(
         walkthroughVisible = state.explore.walkthroughVisible,
         selectedCategory = state.explore.selectedCategory,
         savedPlaces = state.savedPlaces,
-        settingsSummary = exploreSettingsSummary(state.settings.exploreSettings.defaultRadiusMiles, state.settings.exploreSettings.requireOpenNowByDefault),
+        settingsSummary = exploreSettingsSummary(
+            state.settings.exploreSettings.defaultRadiusMiles,
+            state.settings.exploreSettings.requireOpenNowByDefault
+        ),
         onDismissWalkthrough = viewModel::dismissExploreWalkthrough,
         onOpenSettings = onExploreSettings,
         onCategorySelected = {
@@ -59,7 +64,7 @@ fun ExploreScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExploreScreenContent(
     walkthroughVisible: Boolean,
@@ -74,11 +79,17 @@ fun ExploreScreenContent(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Take me Somewhere…") },
+            BrandTopBar(
+                title = "Take me somewhere",
+                subtitle = "Side quests, nearby weirdness, and better ideas than whatever you were about to do.",
+                badge = "Play mode",
                 actions = {
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Explore settings")
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Explore settings",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 }
             )
@@ -89,7 +100,8 @@ fun ExploreScreenContent(
                 onMapClick = onMapClick,
                 onExploreClick = {}
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
@@ -99,20 +111,35 @@ fun ExploreScreenContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (walkthroughVisible) {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = NightSky)
+                ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Explore first look", style = MaterialTheme.typography.titleMedium)
-                        Text("Choose an intent chip, let Simon rank a few nearby ideas, and then check the 'why this was chosen' explanation before you commit. Explore is meant to feel playful, not random.")
-                        Text("Saved places, local reviews, and your Explore rules stay on-device in this first release.")
+                        Text("Explore first look", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimary)
+                        Text(
+                            "Choose an intent chip, let Simon rank a few nearby ideas, and then check the why before you commit. Explore is meant to feel playful, not random.",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f)
+                        )
+                        Text(
+                            "Saved places, local reviews, and your Explore rules stay on-device in this first release.",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f)
+                        )
                         TextButton(onClick = onDismissWalkthrough) { Text("Sounds good") }
                     }
                 }
             }
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("How Explore works", style = MaterialTheme.typography.titleMedium)
-                    Text("Each chip maps to a ranking intent, not a guarantee of perfect live data. Simon combines distance, hours, local reviews, novelty, route fit, and any provider signals that are actually available in this build.")
-                    Text(settingsSummary, style = MaterialTheme.typography.bodySmall)
+                    Text("How Explore works", style = MaterialTheme.typography.titleMedium, color = NightSky)
+                    Text(
+                        "Each chip maps to a ranking intent, not a promise of perfect live data. Simon blends distance, hours, local reviews, novelty, route fit, and whatever provider signals are actually available.",
+                        color = NightSky.copy(alpha = 0.82f)
+                    )
+                    Text(settingsSummary, style = MaterialTheme.typography.bodySmall, color = NightSky.copy(alpha = 0.72f))
                 }
             }
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -122,11 +149,14 @@ fun ExploreScreenContent(
                         Text("Saved favorites from Explore show up here for quick map preview or navigation entry. Nothing is synced to an account yet.")
                     } else {
                         savedPlaces.take(3).forEach { savedPlace ->
-                            Card(modifier = Modifier.fillMaxWidth()) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(savedPlace.name, style = MaterialTheme.typography.titleSmall)
-                                    Text(savedPlace.typeLabel, style = MaterialTheme.typography.bodySmall)
-                                    Text(savedPlace.address, style = MaterialTheme.typography.bodySmall)
+                                    Text(savedPlace.name, style = MaterialTheme.typography.titleSmall, color = NightSky)
+                                    Text(savedPlace.typeLabel, style = MaterialTheme.typography.bodySmall, color = NightSky.copy(alpha = 0.76f))
+                                    Text(savedPlace.address, style = MaterialTheme.typography.bodySmall, color = NightSky.copy(alpha = 0.76f))
                                     TextButton(onClick = { onUseSavedPlace(savedPlace) }) { Text("Use on map") }
                                 }
                             }
@@ -148,13 +178,30 @@ fun ExploreScreenContent(
                     )
                 }
             }
-            Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-                Text("Tune Explore settings")
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                color = NightSky
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Dial in the hunt", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimary)
+                    Text(
+                        "Tighten your radius, bias for open spots, and keep Explore feeling more like a playful recommendation engine than a stale list.",
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f)
+                    )
+                    Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                        Text("Tune Explore settings")
+                    }
+                }
             }
         }
     }
 }
 
 private fun exploreSettingsSummary(radiusMiles: Int, requireOpenNow: Boolean): String {
-    return "Current defaults: ${radiusMiles}mi radius · ${if (requireOpenNow) "open-now favored" else "open-now optional"}."
+    return "Current defaults: ${radiusMiles}mi radius, ${if (requireOpenNow) "open-now favored" else "open-now optional"}."
 }

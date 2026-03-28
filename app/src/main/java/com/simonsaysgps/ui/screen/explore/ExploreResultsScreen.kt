@@ -20,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -28,6 +29,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -107,6 +110,7 @@ fun ExploreResultsScreenContent(
     onSeeReviews: (ExploreResult) -> Unit,
     onLeaveReview: (ExploreResult) -> Unit
 ) {
+    val diagnosticsExpanded = remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -136,25 +140,6 @@ fun ExploreResultsScreenContent(
             infoMessage?.let { MessageCard(title = "Explore note", body = it) }
             errorMessage?.let { MessageCard(title = "Explore unavailable", body = it) }
             actionMessage?.let { MessageCard(title = "Quick action", body = it) }
-            if (providerStatuses.isNotEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (showProviderDiagnostics) "Provider status" else "Explore data status", style = MaterialTheme.typography.titleMedium)
-                        if (showProviderDiagnostics) {
-                            providerStatuses.forEach { status ->
-                                Text("• ${status.provider}: ${if (status.available) "ready" else "fallback"} — ${status.detail}")
-                            }
-                        } else {
-                            val available = providerStatuses.count { it.available }
-                            val fallbacks = providerStatuses.size - available
-                            Text("${available} data source${if (available == 1) "" else "s"} responded for this Explore round.")
-                            if (fallbacks > 0) {
-                                Text("${fallbacks} optional source${if (fallbacks == 1) "" else "s"} fell back gracefully, so suggestions may be lighter than usual.")
-                            }
-                        }
-                    }
-                }
-            }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(results, key = { it.candidate.id }) { result ->
                     ExploreResultCard(
@@ -167,6 +152,57 @@ fun ExploreResultsScreenContent(
                         onSeeReviews = { onSeeReviews(result) },
                         onLeaveReview = { onLeaveReview(result) }
                     )
+                }
+                if (providerStatuses.isNotEmpty()) {
+                    item {
+                        ProviderDiagnosticsCard(
+                            providerStatuses = providerStatuses,
+                            showProviderDiagnostics = showProviderDiagnostics,
+                            expanded = diagnosticsExpanded.value,
+                            onToggleExpanded = { diagnosticsExpanded.value = !diagnosticsExpanded.value }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProviderDiagnosticsCard(
+    providerStatuses: List<ExploreProviderStatus>,
+    showProviderDiagnostics: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit
+) {
+    val available = providerStatuses.count { it.available }
+    val fallbacks = providerStatuses.size - available
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Data source details", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${available} source${if (available == 1) "" else "s"} ready${if (fallbacks > 0) ", ${fallbacks} fallback" else ""}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onToggleExpanded) {
+                    Text(if (expanded) "Hide" else "Show")
+                }
+            }
+            if (expanded) {
+                if (showProviderDiagnostics) {
+                    providerStatuses.forEach { status ->
+                        Text("• ${status.provider}: ${if (status.available) "ready" else "fallback"} - ${status.detail}")
+                    }
+                } else {
+                    Text("Provider diagnostics are available here when you want them, but they are no longer the first thing on the page.")
                 }
             }
         }

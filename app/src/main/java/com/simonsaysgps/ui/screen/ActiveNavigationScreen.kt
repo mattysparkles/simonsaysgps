@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -28,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.simonsaysgps.config.ReleaseSurface
 import com.simonsaysgps.domain.model.NavigationSessionState
 import com.simonsaysgps.domain.util.DistanceFormatter
+import com.simonsaysgps.ui.components.BrandTopBar
 import com.simonsaysgps.ui.components.InfoCard
 import com.simonsaysgps.ui.components.MapLibreMapView
 import com.simonsaysgps.ui.model.ActiveNavigationBannerUiMapper
@@ -35,6 +39,10 @@ import com.simonsaysgps.ui.model.ActiveNavigationBannerUiModel
 import com.simonsaysgps.ui.model.LaneGuidanceUiModel
 import com.simonsaysgps.ui.model.LaneUiModel
 import com.simonsaysgps.ui.test.UiTestTags
+import com.simonsaysgps.ui.theme.Coral
+import com.simonsaysgps.ui.theme.ElectricBlue
+import com.simonsaysgps.ui.theme.NightSky
+import com.simonsaysgps.ui.theme.Sun
 import com.simonsaysgps.ui.viewmodel.AppUiState
 import com.simonsaysgps.ui.viewmodel.AppViewModel
 
@@ -60,7 +68,8 @@ fun ActiveNavigationScreenContent(
             modifier = modifier,
             currentLocation = state.currentLocation?.coordinate,
             selectedLocation = state.selectedPlace?.coordinate,
-            routeGeometry = state.navigationState.route?.geometry.orEmpty()
+            routeGeometry = state.navigationState.route?.geometry.orEmpty(),
+            followCurrentLocation = true
         )
     },
     debugOverlay: @Composable () -> Unit = { DebugOverlayContent(state.navigationState, state.currentLocation?.coordinate?.latitude, state.currentLocation?.coordinate?.longitude) }
@@ -68,57 +77,128 @@ fun ActiveNavigationScreenContent(
     val navigation = state.navigationState
     val route = navigation.route
     val banner = ActiveNavigationBannerUiMapper.map(navigation, state.settings)
-    Scaffold(modifier = Modifier.testTag(UiTestTags.ACTIVE_NAVIGATION_SCREEN)) { padding ->
+    Scaffold(
+        modifier = Modifier.testTag(UiTestTags.ACTIVE_NAVIGATION_SCREEN),
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            mapContent(Modifier.fillMaxWidth().height(260.dp))
-            ActiveNavigationBannerCard(banner = banner)
-            InfoCard(
-                title = "Distance to next",
-                value = navigation.distanceToNextManeuverMeters?.let { DistanceFormatter.format(it, state.settings.distanceUnit) } ?: "Done"
+            BrandTopBar(
+                title = if (banner is ActiveNavigationBannerUiModel.Arrived) "Trip complete" else "Simon is driving shotgun",
+                subtitle = if (banner is ActiveNavigationBannerUiModel.Arrived) {
+                    "You made it. Time for the post-game commentary."
+                } else {
+                    "Bright cues, quick reads, and just enough personality to keep the drive awake."
+                },
+                badge = if (banner is ActiveNavigationBannerUiModel.Arrived) "Arrived" else "Live route"
             )
-            InfoCard(title = "Current road", value = navigation.currentRoad ?: navigation.upcomingManeuver?.roadName ?: "Following route")
-            InfoCard(
-                title = "ETA",
-                value = route?.etaEpochSeconds?.let {
-                    java.time.Instant.ofEpochSecond(it).atZone(java.time.ZoneId.systemDefault()).toLocalTime().toString()
-                } ?: "--"
-            )
-            navigation.spokenPrompt?.let {
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    tonalElevation = 2.dp
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = NightSky)
                 ) {
-                    Text(
-                        text = it,
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyLarge
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(380.dp)
+                    ) {
+                        mapContent(Modifier.fillMaxSize())
+                        ActiveNavigationBannerCard(
+                            banner = banner,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(16.dp)
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    InfoCard(
+                        title = "Distance to next",
+                        value = navigation.distanceToNextManeuverMeters?.let { DistanceFormatter.format(it, state.settings.distanceUnit) } ?: "Done",
+                        badgeText = "Next",
+                        badgeColor = Sun,
+                        modifier = Modifier.weight(1f)
+                    )
+                    InfoCard(
+                        title = "ETA",
+                        value = route?.etaEpochSeconds?.let {
+                            java.time.Instant.ofEpochSecond(it).atZone(java.time.ZoneId.systemDefault()).toLocalTime().toString()
+                        } ?: "--",
+                        badgeText = "Clock",
+                        badgeColor = ElectricBlue.copy(alpha = 0.18f),
+                        modifier = Modifier.weight(1f)
                     )
                 }
-            }
-            if (state.settings.debugMode) {
-                debugOverlay()
-            }
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(if (banner is ActiveNavigationBannerUiModel.Arrived) "Finish trip" else "End navigation")
+                InfoCard(
+                    title = "Current road",
+                    value = navigation.currentRoad ?: navigation.upcomingManeuver?.roadName ?: "Following route",
+                    badgeText = "Live"
+                )
+                navigation.spokenPrompt?.let {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        tonalElevation = 2.dp
+                    ) {
+                        Text(
+                            text = it,
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onTertiary
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth(0.7f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Trip mode", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (banner is ActiveNavigationBannerUiModel.Arrived) "Arrival moment" else "Simon is actively guiding",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = NightSky
+                            )
+                        }
+                        Spacer(modifier = Modifier)
+                        Button(onClick = onBack) {
+                            Text(if (banner is ActiveNavigationBannerUiModel.Arrived) "Finish trip" else "End trip")
+                        }
+                    }
+                }
+                if (state.settings.debugMode) {
+                    debugOverlay()
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ActiveNavigationBannerCard(banner: ActiveNavigationBannerUiModel) {
+private fun ActiveNavigationBannerCard(
+    banner: ActiveNavigationBannerUiModel,
+    modifier: Modifier = Modifier
+) {
     Surface(
         shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
         tonalElevation = 3.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         when (banner) {
             is ActiveNavigationBannerUiModel.Arrived -> ArrivalBannerContent(banner)
@@ -136,9 +216,9 @@ private fun ArrivalBannerContent(banner: ActiveNavigationBannerUiModel.Arrived) 
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(text = banner.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(text = banner.message, style = MaterialTheme.typography.headlineSmall)
-        Text(text = banner.detail, style = MaterialTheme.typography.bodyMedium)
+        Text(text = banner.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = NightSky)
+        Text(text = banner.message, style = MaterialTheme.typography.headlineSmall, color = NightSky)
+        Text(text = banner.detail, style = MaterialTheme.typography.bodyMedium, color = NightSky.copy(alpha = 0.78f))
     }
 }
 
@@ -261,7 +341,8 @@ private fun Badge(text: String, color: Color) {
             .background(color, RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Bold
+        fontWeight = FontWeight.Bold,
+        color = if (color == Coral) Color.White else NightSky
     )
 }
 

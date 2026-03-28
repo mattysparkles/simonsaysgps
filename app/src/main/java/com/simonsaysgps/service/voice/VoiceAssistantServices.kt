@@ -295,15 +295,16 @@ class DefaultVoiceActionDispatcher @Inject constructor(
             }
 
             VoiceIntent.ReviewCurrentPlace -> {
+                val selectedPlace = context.selectedPlace
                 reviewDraftRepository.startDraft(
                     ReviewDraft(
                         id = "review-${System.currentTimeMillis()}",
-                        place = context.selectedPlace
+                        place = selectedPlace
                     )
                 )
                 VoiceDispatchResult.ReviewStarted(
-                    spokenConfirmation = if (context.selectedPlace != null) {
-                        "Ready to draft a review for ${context.selectedPlace.name}. Dictate your note when you're ready."
+                    spokenConfirmation = if (selectedPlace != null) {
+                        "Ready to draft a review for ${selectedPlace.name}. Dictate your note when you're ready."
                     } else {
                         "Ready to draft a quick review. Pick a place first for the final save target."
                     }

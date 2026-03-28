@@ -198,7 +198,9 @@ class DefaultExploreRepository @Inject constructor(
     private fun isDuplicate(left: ExploreCandidate, right: ExploreCandidate): Boolean {
         val explicitLink = left.providerLinks.any { leftLink -> right.providerLinks.any { it.provider == leftLink.provider && it.externalId == leftLink.externalId } }
         if (explicitLink) return true
-        val samePhone = left.phoneNumber != null && right.phoneNumber != null && digitsOnly(left.phoneNumber) == digitsOnly(right.phoneNumber)
+        val leftPhone = left.phoneNumber
+        val rightPhone = right.phoneNumber
+        val samePhone = leftPhone != null && rightPhone != null && digitsOnly(leftPhone) == digitsOnly(rightPhone)
         val nameClose = normalize(left.name) == normalize(right.name)
         val addressClose = normalize(left.address).contains(normalize(right.address)) || normalize(right.address).contains(normalize(left.address))
         val distanceMeters = GeoUtils.distanceMeters(left.coordinate, right.coordinate)
